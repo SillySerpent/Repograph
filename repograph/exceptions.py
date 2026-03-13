@@ -4,7 +4,7 @@
 because another process holds the writer lock (single-writer model). See
 ``docs/ACCURACY_CONTRACT.md`` (concurrency).
 
-:exc:`RepographNotFoundError` — raised when :func:`~repograph.config.get_repo_root`
+:exc:`RepographNotFoundError` — raised when :func:`~repograph.settings.get_repo_root`
 cannot find a ``.repograph`` directory walking up from the given path.
 """
 
