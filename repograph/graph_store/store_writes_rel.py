@@ -35,7 +35,7 @@ class GraphStoreRelWrites(GraphStoreBase):
         if not pairs:
             return
         uniq = list(dict.fromkeys(pairs))
-        from repograph.config import PREFETCH_CHUNK_SIZE
+        from repograph.settings import PREFETCH_CHUNK_SIZE
         chunk = PREFETCH_CHUNK_SIZE
         for i in range(0, len(uniq), chunk):
             part = uniq[i : i + chunk]
