@@ -107,13 +107,13 @@ class GraphStoreSyncReaders(GraphStoreBase):
     def get_file(self, file_path: str) -> dict | None:
         from repograph.core.models import NodeID
         rows = self.query(
-            "MATCH (f:File {id: $id}) RETURN f.id, f.path, f.source_hash, f.language",
+            "MATCH (f:File {id: $id}) RETURN f.id, f.path, f.abs_path, f.source_hash, f.language",
             {"id": NodeID.make_file_id(file_path)}
         )
         if not rows:
             return None
         r = rows[0]
-        return {"id": r[0], "path": r[1], "source_hash": r[2], "language": r[3]}
+        return {"id": r[0], "path": r[1], "abs_path": r[2], "source_hash": r[3], "language": r[4]}
 
     def get_all_file_hashes(self) -> dict[str, str]:
         """Return {path: source_hash} for all indexed files."""
@@ -131,15 +131,15 @@ class GraphStoreSyncReaders(GraphStoreBase):
             """
             MATCH (f:File)
             RETURN f.id, f.path, f.language, f.line_count,
-                   f.source_hash, f.is_test, f.is_config
+                   f.abs_path, f.source_hash, f.is_test, f.is_config
             ORDER BY f.path
             """
         )
         return [
             {
                 "id": r[0], "path": r[1], "language": r[2],
-                "line_count": r[3], "source_hash": r[4],
-                "is_test": r[5], "is_config": r[6],
+                "line_count": r[3], "abs_path": r[4], "source_hash": r[5],
+                "is_test": r[6], "is_config": r[7],
             }
             for r in rows
         ]
