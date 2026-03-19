@@ -4,11 +4,125 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from repograph.config import ERROR_TRUNCATION_CHARS as _ERROR_TRUNCATION_CHARS
+from repograph.settings import ERROR_TRUNCATION_CHARS as _ERROR_TRUNCATION_CHARS
 from repograph.graph_store.store import GraphStore
 from repograph.trust.contract import CONTRACT_VERSION
+
+
+def _read_json_file(path: str) -> dict[str, Any] | None:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            payload = json.load(fh)
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
+def _trace_inventory(repograph_dir: str) -> tuple[bool, int, int | None]:
+    runtime_dir = Path(repograph_dir) / "runtime"
+    if not runtime_dir.is_dir():
+        return False, 0, 0
+
+    try:
+        trace_files = sorted(path for path in runtime_dir.iterdir() if path.is_file())
+    except OSError:
+        return True, 0, None
+
+    record_count = 0
+    for path in trace_files:
+        try:
+            with path.open(encoding="utf-8", errors="replace") as fh:
+                record_count += sum(1 for _ in fh)
+        except OSError:
+            return True, len(trace_files), None
+    return True, len(trace_files), record_count
+
+
+def _pathway_context_counts(store: GraphStore | None) -> tuple[int | None, int | None]:
+    if store is None:
+        return None, None
+    try:
+        rows = store.query("MATCH (p:Pathway) RETURN p.context_doc")
+    except Exception:
+        return None, None
+    total = len(rows)
+    with_context = sum(1 for row in rows if (row[0] or "").strip())
+    return total, with_context
+
+
+def _plugin_executed(hook_summary: dict[str, Any], plugin_id: str) -> bool:
+    plugins = (
+        hook_summary.get("dynamic_stage", {}).get("plugins", {})
+        if isinstance(hook_summary, dict)
+        else {}
+    )
+    plugin_state = plugins.get(plugin_id)
+    return bool(isinstance(plugin_state, dict) and plugin_state.get("executed"))
+
+
+def _build_analysis_readiness(
+    *,
+    repo_root: str,
+    repograph_dir: str,
+    store: GraphStore | None = None,
+    hook_summary: dict[str, Any] | None = None,
+    dynamic_analysis: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    hook_summary = hook_summary or {}
+    dynamic_analysis = dynamic_analysis or {}
+
+    runtime_dir_present, trace_file_count, trace_record_count = _trace_inventory(repograph_dir)
+    if dynamic_analysis:
+        trace_file_count = int(dynamic_analysis.get("trace_file_count", trace_file_count) or 0)
+        trace_record_value = dynamic_analysis.get("trace_record_count", trace_record_count)
+        trace_record_count = int(trace_record_value) if trace_record_value is not None else None
+
+    coverage_json_present = bool(
+        dynamic_analysis.get("coverage_json_present")
+        if "coverage_json_present" in dynamic_analysis
+        else os.path.isfile(os.path.join(repo_root, "coverage.json"))
+    )
+    runtime_overlay_applied = bool(
+        dynamic_analysis.get("runtime_overlay_applied")
+        if "runtime_overlay_applied" in dynamic_analysis
+        else (
+            trace_file_count > 0
+            and _plugin_executed(hook_summary, "dynamic_analyzer.runtime_overlay")
+        )
+    )
+    coverage_overlay_applied = bool(
+        dynamic_analysis.get("coverage_overlay_applied")
+        if "coverage_overlay_applied" in dynamic_analysis
+        else (
+            coverage_json_present
+            and _plugin_executed(hook_summary, "dynamic_analyzer.coverage_overlay")
+        )
+    )
+
+    pathways_total, pathways_with_context = _pathway_context_counts(store)
+    diagnostics = _read_json_file(
+        os.path.join(repograph_dir, "meta", "config_registry_diagnostics.json")
+    ) or {}
+
+    return {
+        "runtime_trace_dir_present": runtime_dir_present,
+        "trace_file_count": trace_file_count,
+        "trace_record_count": trace_record_count,
+        "runtime_overlay_applied": runtime_overlay_applied,
+        "coverage_json_present": coverage_json_present,
+        "coverage_overlay_applied": coverage_overlay_applied,
+        "pathways_total": pathways_total,
+        "pathways_with_context": pathways_with_context,
+        "pathway_contexts_generated": bool(pathways_with_context),
+        "config_registry_status": diagnostics.get("status"),
+        "config_registry_registry_keys": diagnostics.get("registry_keys"),
+        "config_registry_pathways_total": diagnostics.get("pathways_total"),
+        "config_registry_pathways_with_context": diagnostics.get("pathways_with_context"),
+        "config_registry_pathway_backed": bool(diagnostics.get("pathways_with_context")),
+    }
 
 
 def build_health_report(
@@ -65,6 +179,13 @@ def build_health_report(
         "warnings_count": int(hs.get("warnings_count") or 0),
     }
     report["dynamic_analysis"] = dict(dynamic_analysis or {})
+    report["analysis_readiness"] = _build_analysis_readiness(
+        repo_root=repo_root,
+        repograph_dir=repograph_dir,
+        store=store,
+        hook_summary=hs,
+        dynamic_analysis=dynamic_analysis,
+    )
     report["partial_completion"] = failed > 0
     if failed > 0:
         report["status"] = "degraded"
@@ -83,6 +204,11 @@ def build_health_failure_report(
     dynamic_analysis: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist a loud failure marker after a pipeline or phase crash."""
+    analysis_readiness = _build_analysis_readiness(
+        repo_root=repo_root,
+        repograph_dir=repograph_dir,
+        dynamic_analysis=dynamic_analysis,
+    )
     return {
         "contract_version": CONTRACT_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -96,6 +222,7 @@ def build_health_failure_report(
         "call_edges_total": None,
         "call_edges_by_reason": None,
         "dynamic_analysis": dict(dynamic_analysis or {}),
+        "analysis_readiness": analysis_readiness,
     }
 
 
