@@ -3,9 +3,9 @@
 Resolves to:
 
 * ``setup-verify`` — fix editable-install ``.pth`` on macOS (see :func:`fix_editable_pth`)
-  and verify :mod:`repograph.cli` imports from a clean working directory.
+  and verify :mod:`repograph.surfaces.cli` imports from a clean working directory.
 * ``menu`` — launch the interactive TUI (:mod:`repograph.interactive.main`).
-* anything else — Typer CLI in :mod:`repograph.cli` (``cli`` subcommand strips prefix).
+* anything else — Typer CLI in :mod:`repograph.surfaces.cli` (``cli`` subcommand strips prefix).
 
 Install: ``pip install -e .`` → console script ``repograph = repograph.entry:main``.
 """
@@ -52,7 +52,7 @@ def fix_editable_pth() -> None:
 
 
 def verify_import_from_clean_cwd() -> None:
-    """Fail loudly if ``repograph.cli`` is not importable unless cwd helps."""
+    """Fail loudly if ``repograph.surfaces.cli`` is not importable unless cwd helps."""
     env = os.environ.copy()
     cwd = os.getcwd()
     try:
@@ -64,7 +64,7 @@ def verify_import_from_clean_cwd() -> None:
                 "import importlib.util as u, sys; "
                 "a=u.find_spec('repograph'); "
                 "assert a and a.origin, 'repograph not found'; "
-                "import repograph.cli; "
+                "import repograph.surfaces.cli; "
                 "print('import_ok', a.origin)"
             )
             r = subprocess.run(
@@ -78,7 +78,7 @@ def verify_import_from_clean_cwd() -> None:
             if r.returncode != 0:
                 err = (r.stderr or r.stdout or "").strip()
                 print(
-                    "[repograph] FATAL: repograph.cli is not importable from an isolated cwd.\n"
+                    "[repograph] FATAL: repograph.surfaces.cli is not importable from an isolated cwd.\n"
                     f"  This usually means the editable install path is skipped (e.g. macOS hidden .pth).\n"
                     f"  Run:  python -m repograph.entry setup-verify\n"
                     f"  Details: {err}",
@@ -109,7 +109,7 @@ def main() -> None:
     if args and args[0] == "cli":
         args = args[1:]
     sys.argv = [sys.argv[0]] + args
-    from repograph.cli import app
+    from repograph.surfaces.cli import app
 
     raise SystemExit(app())
 
