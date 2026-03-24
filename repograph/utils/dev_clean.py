@@ -173,12 +173,12 @@ def clean_development_artifacts(repo_root: Path, *, recursive: bool = True) -> l
         except OSError:
             pass
 
-    # --- Auto-generated trace install configs ---
+    # --- Auto-generated trace install configs (written to .repograph/ by the plugin) ---
     for fname, marker in (
         ("conftest.py", _MARKER_CONFTEST),
         ("sitecustomize.py", _MARKER_SITECUSTOM),
     ):
-        cfg = root / fname
+        cfg = root / ".repograph" / fname
         if not cfg.is_file():
             continue
         try:
