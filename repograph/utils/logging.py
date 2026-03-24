@@ -12,8 +12,9 @@ This module prints to **stderr** via Rich; it is **not** Python's stdlib
 
 **Where it is used**
 
-- Pipeline hook failures: ``repograph/pipeline/runner.py`` uses ``warn`` (not
-  ``warn_once``) per failed plugin execution so repeated syncs still show errors.
+- Pipeline hook failures: ``repograph/pipeline/runner_parts/hooks.py`` uses
+  ``warn`` (not ``warn_once``) per failed plugin execution so repeated syncs
+  still show errors.
 - Best-effort plugin/exporter paths: ``warn_once`` for non-fatal read/generate
   failures.
 
