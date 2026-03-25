@@ -43,11 +43,13 @@ def parse_file(file_record: FileRecord) -> ParsedFile:
         parsed = plugin.parse_file(file_record)
 
     scheduler = get_hook_scheduler()
+    source_text = _read_source_text(file_record)
     for execution in scheduler.run_hook(
         "on_file_parsed",
         kind="framework_adapter",
         file_record=file_record,
         parsed_file=parsed,
+        text=source_text,
     ):
         result = execution.result or {}
         if not isinstance(result, dict):
@@ -58,6 +60,20 @@ def parse_file(file_record: FileRecord) -> ParsedFile:
                 parsed.framework_hints.append(framework)
         parsed.plugin_artifacts[execution.plugin_id] = result
     return parsed
+
+
+def _read_source_text(file_record: FileRecord) -> str:
+    """Best-effort source loading for framework adapters.
+
+    Adapters like the React and Next.js plugins inspect raw source text on the
+    live parse path. Keep this transient here rather than persisting source text
+    on ParsedFile.
+    """
+    try:
+        with open(file_record.abs_path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return ""
 
 
 def supported_languages() -> list[str]:
