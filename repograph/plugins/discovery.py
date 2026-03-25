@@ -58,7 +58,7 @@ EXPORTER_ORDER = (
 
 EVIDENCE_PRODUCER_ORDER = ("declared_dependencies", "runtime_overlay")
 
-DYNAMIC_ANALYZER_ORDER = ("runtime_overlay", "runtime_quality")
+DYNAMIC_ANALYZER_ORDER = ("runtime_overlay", "coverage_overlay", "runtime_quality")
 
 
 def import_build_plugin(base_pkg: str, name: str) -> Callable[[], Any]:
