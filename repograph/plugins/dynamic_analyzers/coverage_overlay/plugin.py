@@ -56,7 +56,7 @@ _logger = logging.getLogger(__name__)
 
 class CoverageOverlayPlugin(DynamicAnalyzerPlugin):
     manifest = PluginManifest(
-        id="dynamic.coverage_overlay",
+        id="dynamic_analyzer.coverage_overlay",
         name="Pytest-cov coverage overlay",
         kind="dynamic_analyzer",
         description=(
