@@ -1,0 +1,2 @@
+{"kind": "session", "ts": 1700000000.0, "tracer": "test", "version": "1", "repo_root": "/tmp", "python": "3.11.0"}
+{"kind": "call", "ts": 1700000001.0, "fn": "sample.module.fn", "file": "sample/module.py", "line": 10, "caller": ""}

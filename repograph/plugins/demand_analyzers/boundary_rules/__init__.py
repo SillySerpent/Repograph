@@ -1,0 +1,1 @@
+from repograph.plugins.demand_analyzers.boundary_rules.plugin import build_plugin

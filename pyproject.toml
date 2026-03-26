@@ -1,0 +1,87 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "repograph"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "tree-sitter>=0.23",
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-bash",
+    "tree-sitter-html",
+    "tree-sitter-css",
+    "kuzu>=0.7",
+    "typer>=0.12",
+    "click>=8",
+    "shellingham",
+    "rich",
+    "watchdog",
+    "gitpython",
+    "pyyaml",
+    "pathspec",
+]
+
+[project.optional-dependencies]
+embeddings = [
+    "sentence-transformers>=3.0",
+]
+community = [
+    "leidenalg",
+    "igraph",
+]
+mcp = [
+    "mcp[cli]",
+]
+# templates: jinja2 is reserved for future Markdown template rendering
+templates = [
+    "jinja2",
+]
+dev = [
+    "pytest>=7",
+    "pytest-cov",
+]
+
+[tool.pyright]
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+# Vendored / sample trees under tests are not part of the typed product surface.
+exclude = ["tests/fixtures"]
+
+[project.scripts]
+repograph = "repograph.entry:main"
+# Same as the `pytest` CLI; requires pytest (install with `pip install -e ".[dev]"`).
+pytests = "pytest:console_main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["repograph"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["fixtures", ".git", ".venv", "build", "dist", "__pycache__"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: disk/network heavy integration tests",
+    "slow: tests that take noticeable time",
+    "dynamic: runtime trace / overlay tests",
+    "accuracy: contract and golden-data quality checks",
+    "quality: post-sync graph invariant checks",
+    "pyright: static typecheck of repograph + tests (needs Node/npx for pyright)",
+    "plugin: plugin registry and scheduler tests",
+    "requires_mcp: needs mcp package installed",
+]
+
+[tool.coverage.run]
+source = ["repograph"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+fail_under = 0
+show_missing = true

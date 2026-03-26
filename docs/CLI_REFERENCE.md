@@ -1,0 +1,288 @@
+# RepoGraph CLI Reference
+
+All commands follow the pattern:
+
+```
+repograph <command> [PATH] [OPTIONS]
+```
+
+`PATH` defaults to the current working directory when omitted.
+
+### Interactive menu: CLI command browser
+
+`repograph menu` (or `python -m repograph.entry menu`) opens the text UI. The **first option** is **CLI command browser**: it lists every Typer command in categories, explains what each does and common flags (more narrative than `repograph --help` alone), shows examples, and can **Run…** a command for the current repo with **default args**, **named presets** (for example `clean --dev -y`, or `report --pathways 25`), or **custom flags** you type (parsed like a shell). Under each preset, plain-language text explains what that choice does for someone not used to CLI flags; you can still print **`repograph <cmd> --help`** for the full machine-readable flag list.
+
+---
+
+## `repograph init`
+
+Initialize RepoGraph in a repository.  Creates the `.repograph/` directory
+structure.  Must be run (or `sync` used directly) before any other command.
+
+```
+repograph init [PATH] [--force]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--force / -f` | Re-initialize even if already done (recreates `.repograph/` layout and `.gitignore`; does **not** remove `graph.db` — delete it manually or use `repograph clean` for a full wipe) |
+
+---
+
+## `repograph sync`
+
+Index (or re-index) the repository.  Runs the full analysis pipeline (parse, calls, pathways, dead code, etc. — see `docs/PIPELINE.md`).
+
+```
+repograph sync [PATH] [OPTIONS]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--full` | Force complete rebuild from scratch |
+| `--embeddings` | Generate vector embeddings (requires `sentence-transformers`) |
+| `--no-git` | Skip git co-change coupling phase (Phase 12) |
+| `--strict` | Fail sync if any optional phase errors |
+| `--continue-on-error / --no-continue-on-error` | Control optional-phase failure behaviour |
+| `--include-tests-config-registry` | Phase 17: include test files when building `config_registry.json` |
+
+---
+
+## `repograph summary`
+
+One-screen intelligence summary.  The best starting point for an AI or human
+entering an unfamiliar codebase.
+
+```
+repograph summary [PATH] [--json] [--verbose]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as machine-readable JSON |
+| `--verbose / -v` | Show score breakdown for each entry point |
+
+Scores and rankings depend on the indexed repo and analyzer version.
+
+---
+
+## `repograph report`
+
+Single JSON or human-readable **full intelligence dump** — same data as
+`RepoGraph.full_report()` (entry points, pathways with context docs, dead code,
+duplicates, modules, invariants, config registry, test coverage, doc warnings,
+communities).
+
+```
+repograph report [PATH] [--json] [--pathways N] [--dead N]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Print JSON only (no Rich markup); suitable for piping to a file |
+| `--pathways / -p N` | Max pathways to include (default 10) |
+| `--dead / -d N` | Max dead-code symbols per tier (default 20) |
+
+Pathway `context_doc` values include an **INTERPRETATION** section: steps follow
+BFS over `CALLS` edges, not guaranteed runtime order.
+
+---
+
+## `repograph modules`
+
+Per-directory structural overview.  Replaces calling `node` on every file
+when doing context-gathering.
+
+```
+repograph modules [PATH] [OPTIONS]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--min-files / -m N` | Hide modules with fewer than N files |
+| `--issues` | Only show modules with dead code or duplicates |
+| `--json` | Output as JSON |
+
+---
+
+## `repograph config`
+
+Global config-key → consumer mapping.  Use `--key` to see the blast radius
+of renaming a single config value.
+
+```
+repograph config [PATH] [--key NAME] [--top N] [--json] [--include-tests]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--key / -k NAME` | Show full detail (pathways + files) for one key |
+| `--top / -n N` | Number of keys to show (default 20) |
+| `--json` | Output as JSON |
+| `--include-tests` | Rebuild the registry from the graph including test files (live scan; ignores cached JSON) |
+
+---
+
+## `repograph invariants`
+
+Architectural constraints documented in docstrings (`INV-`, `NEVER`,
+`MUST NOT`, `ALWAYS`, thread-safety notes, etc.).
+
+```
+repograph invariants [PATH] [--type TYPE] [--json]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--type / -t TYPE` | Filter: `constraint` / `guarantee` / `thread` / `lifecycle` |
+| `--json` | Output as JSON |
+
+---
+
+## `repograph test-map`
+
+Per-file test coverage of entry points.  Sorted by coverage ascending so
+gaps are immediately obvious.
+
+```
+repograph test-map [PATH] [OPTIONS]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--min-eps N` | Only show files with at least N entry points |
+| `--uncovered` | Only show files with 0% coverage |
+| `--json` | Output as JSON |
+
+---
+
+## `repograph pathway list`
+
+List all detected pathways sorted by importance.
+
+```
+repograph pathway list [PATH] [--include-tests]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--include-tests` | Also show test-entry pathways |
+
+---
+
+## `repograph pathway show NAME`
+
+Print the full context document for a pathway.  Includes BFS-ordered steps (see
+the INTERPRETATION block in the doc — not necessarily runtime order), config
+dependencies, variable threads, and docstring annotations.
+
+```
+repograph pathway show <name> [PATH]
+```
+
+---
+
+## `repograph pathway update NAME`
+
+Re-generate the context document for a single pathway.
+
+```
+repograph pathway update <name> [--path PATH]
+```
+
+---
+
+## `repograph node IDENTIFIER`
+
+Show structured data for a file path or qualified symbol name.
+
+```
+repograph node <identifier> [--path PATH]
+```
+
+`identifier` can be a relative file path (`src/bots/champion_bot.py`) or
+a symbol name (`ChampionBot.on_tick`).
+
+---
+
+## `repograph impact SYMBOL`
+
+Blast radius: everything that calls or imports this symbol.
+
+```
+repograph impact <symbol> [--depth N] [--path PATH]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--depth / -d N` | Call-graph hops to traverse (default 3) |
+
+---
+
+## `repograph query TEXT`
+
+Hybrid search: BM25 + fuzzy name matching.
+
+```
+repograph query <text> [--limit N] [--path PATH]
+```
+
+---
+
+## `repograph status`
+
+Show index health: node counts, stale artifacts, last sync time.
+
+```
+repograph status [PATH]
+```
+
+---
+
+## `repograph doctor`
+
+Verify Python environment, imports, and optional graph database.
+
+```
+repograph doctor [PATH] [--verbose]
+```
+
+---
+
+## `repograph export`
+
+Export the full graph as JSON.
+
+```
+repograph export [PATH] [--output FILE]
+```
+
+---
+
+## `repograph watch`
+
+Watch mode: re-sync on file changes.
+
+```
+repograph watch [PATH] [--no-git] [--strict]
+```
+
+---
+
+## `repograph mcp`
+
+Start the MCP (Model Context Protocol) server.
+
+```
+repograph mcp [PATH] [--port N]
+```
+
+---
+
+## `repograph clean`
+
+Delete the `.repograph/` directory entirely.
+
+```
+repograph clean [PATH] [--yes / -y]
+```

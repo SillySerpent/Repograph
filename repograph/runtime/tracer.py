@@ -1,0 +1,295 @@
+"""sys.settrace-based call tracer for RepoGraph dynamic analysis.
+
+Usage (standalone — no pytest required)
+-----------------------------------------
+    from repograph.runtime.tracer import SysTracer
+
+    with SysTracer(repo_root="/path/to/repo", repograph_dir="/path/to/.repograph"):
+        # run code under trace
+        your_function()
+
+    # Trace file is now at .repograph/runtime/trace_<timestamp>.jsonl
+
+Usage via pytest plugin
+------------------------
+    # In conftest.py:
+    from repograph.runtime.tracer import install_pytest_plugin
+    install_pytest_plugin()
+
+    # Then run:
+    pytest --repograph-trace
+
+Implementation notes
+---------------------
+- Uses sys.settrace which works at the Python interpreter level.
+- Filters to repo-relative files only (ignores stdlib, site-packages).
+- Writes JSONL incrementally — each call is flushed immediately so traces
+  survive interrupted test runs.
+- Thread-safe: each thread gets its own settrace via threading.settrace.
+- Overhead: typically 2–5× slower than uninstrumented code. Use on test
+  suites, not production workloads.
+"""
+from __future__ import annotations
+
+import inspect
+import json
+import os
+import sys
+import time
+import threading
+from pathlib import Path
+from typing import Any
+
+from repograph.runtime.trace_format import (
+    TRACE_FILE_SUFFIX,
+    TRACE_FORMAT,
+    make_session_record,
+    trace_dir,
+)
+
+
+class SysTracer:
+    """Context manager that traces Python calls to a JSONL file.
+
+    Parameters
+    ----------
+    repo_root:
+        Absolute path to the repository root.  Only calls from files
+        under this path are recorded.
+    repograph_dir:
+        Path to ``.repograph/``.  Trace files are written to
+        ``<repograph_dir>/runtime/``.
+    include_stdlib:
+        When True, also trace calls from the standard library.  Defaults
+        to False (very noisy).
+    session_name:
+        Optional prefix for the trace file name.  Defaults to ``"trace"``.
+    """
+
+    def __init__(
+        self,
+        repo_root: str | Path,
+        repograph_dir: str | Path,
+        include_stdlib: bool = False,
+        session_name: str = "trace",
+    ) -> None:
+        self.repo_root = str(Path(repo_root).resolve())
+        self.repograph_dir = str(Path(repograph_dir).resolve())
+        self.include_stdlib = include_stdlib
+        self.session_name = session_name
+        self._file: Any = None
+        self._path: Path | None = None
+        self._lock = threading.Lock()
+        self._prev_trace = None
+
+    def __enter__(self) -> "SysTracer":
+        self.start()
+        return self
+
+    def __exit__(self, *_) -> None:
+        self.stop()
+
+    def start(self) -> None:
+        """Begin tracing."""
+        out_dir = trace_dir(self.repograph_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        ts = int(time.time())
+        self._path = out_dir / f"{self.session_name}_{ts}{TRACE_FILE_SUFFIX}"
+        self._file = open(self._path, "w", encoding="utf-8", buffering=1)
+
+        # Write session header
+        self._write(make_session_record(self.repo_root))
+
+        self._prev_trace = sys.gettrace()
+        sys.settrace(self._trace_fn)
+        threading.settrace(self._trace_fn)
+
+    def stop(self) -> None:
+        """Stop tracing and flush the output file."""
+        sys.settrace(self._prev_trace)
+        threading.settrace(self._prev_trace)
+        if self._file:
+            self._file.flush()
+            self._file.close()
+            self._file = None
+
+    @property
+    def trace_path(self) -> Path | None:
+        """Path to the written trace file (available after start())."""
+        return self._path
+
+    # ------------------------------------------------------------------
+    # sys.settrace callback
+    # ------------------------------------------------------------------
+
+    def _trace_fn(self, frame, event, arg):
+        if event != "call":
+            return self._trace_fn
+
+        filename = frame.f_code.co_filename
+        if not filename:
+            return self._trace_fn
+
+        # Only trace files inside repo_root
+        try:
+            rel = os.path.relpath(filename, self.repo_root)
+        except ValueError:
+            return self._trace_fn
+
+        if rel.startswith("..") or rel.startswith("/"):
+            return self._trace_fn
+
+        # Skip non-source files (frozen modules, C extensions, etc.)
+        if not filename.endswith(".py"):
+            return self._trace_fn
+
+        if not self.include_stdlib:
+            if "site-packages" in filename or filename.startswith(sys.prefix):
+                return self._trace_fn
+
+        # Build qualified name from frame
+        fn_name = frame.f_code.co_qualname if hasattr(frame.f_code, "co_qualname") else frame.f_code.co_name
+        module = frame.f_globals.get("__name__", "")
+        qualified = f"{module}.{fn_name}" if module else fn_name
+
+        # Get caller info
+        caller_frame = frame.f_back
+        caller_qn = ""
+        if caller_frame:
+            caller_name = (
+                caller_frame.f_code.co_qualname
+                if hasattr(caller_frame.f_code, "co_qualname")
+                else caller_frame.f_code.co_name
+            )
+            caller_mod = caller_frame.f_globals.get("__name__", "")
+            caller_qn = f"{caller_mod}.{caller_name}" if caller_mod else caller_name
+
+        record = {
+            "kind": "call",
+            "ts": time.time(),
+            "fn": qualified,
+            "file": rel.replace("\\", "/"),
+            "line": frame.f_lineno,
+            "caller": caller_qn,
+        }
+        self._write(record)
+        return self._trace_fn
+
+    def _write(self, record: dict) -> None:
+        if self._file and not self._file.closed:
+            with self._lock:
+                self._file.write(json.dumps(record, separators=(",", ":")) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Convenience: run a callable under trace and return the trace path
+# ---------------------------------------------------------------------------
+
+def trace_call(
+    fn,
+    *args,
+    repo_root: str,
+    repograph_dir: str,
+    session_name: str = "trace",
+    **kwargs,
+) -> tuple[Any, Path | None]:
+    """Run *fn(*args, **kwargs)* under trace. Return (result, trace_path).
+
+    Example
+    -------
+        result, trace_path = trace_call(
+            my_function, arg1, arg2,
+            repo_root="/path/to/repo",
+            repograph_dir="/path/to/repo/.repograph",
+        )
+    """
+    tracer = SysTracer(
+        repo_root=repo_root,
+        repograph_dir=repograph_dir,
+        session_name=session_name,
+    )
+    with tracer:
+        result = fn(*args, **kwargs)
+    return result, tracer.trace_path
+
+
+# ---------------------------------------------------------------------------
+# pytest plugin integration
+# ---------------------------------------------------------------------------
+
+def install_pytest_plugin() -> None:
+    """Register the RepoGraph trace plugin with pytest.
+
+    Call from conftest.py:
+
+        from repograph.runtime.tracer import install_pytest_plugin
+        install_pytest_plugin()
+
+    Then run tests with::
+
+        pytest --repograph-trace [--repograph-dir .repograph]
+
+    Registration injects ``pytest_configure`` into the caller's module (there is
+    no ``pytest.register_plugin_manager`` in current pytest).
+    """
+    frame = inspect.currentframe()
+    if frame is None or frame.f_back is None:
+        return
+    mod_globals = frame.f_back.f_globals
+    if mod_globals.get("_repograph_trace_plugin_registered"):
+        return
+
+    class _RepoGraphTracePlugin:
+        def __init__(self):
+            self.tracer: SysTracer | None = None
+
+        def pytest_addoption(self, parser):
+            parser.addoption(
+                "--repograph-trace",
+                action="store_true",
+                default=False,
+                help="Collect RepoGraph dynamic call traces during test run.",
+            )
+            parser.addoption(
+                "--repograph-dir",
+                default=".repograph",
+                help="Path to .repograph directory (default: .repograph).",
+            )
+
+        def pytest_sessionstart(self, session):
+            if not session.config.getoption("--repograph-trace", default=False):
+                return
+            repo_root = str(Path.cwd())
+            repograph_dir = session.config.getoption("--repograph-dir")
+            self.tracer = SysTracer(
+                repo_root=repo_root,
+                repograph_dir=repograph_dir,
+                session_name="pytest",
+            )
+            self.tracer.start()
+            print(f"\n[repograph] Tracing to: {self.tracer.trace_path}")
+
+        def pytest_sessionfinish(self, session, exitstatus):
+            if self.tracer:
+                self.tracer.stop()
+                print(f"\n[repograph] Trace written: {self.tracer.trace_path}")
+                self.tracer = None
+
+    _plugin = _RepoGraphTracePlugin()
+
+    def _pytest_configure(config):
+        if config.pluginmanager.has_plugin("repograph_trace"):
+            return
+        config.pluginmanager.register(_plugin, "repograph_trace")
+
+    existing = mod_globals.get("pytest_configure")
+    if existing is None:
+        mod_globals["pytest_configure"] = _pytest_configure
+    else:
+        def _pytest_configure_chained(config):
+            existing(config)
+            _pytest_configure(config)
+
+        mod_globals["pytest_configure"] = _pytest_configure_chained
+    mod_globals["_repograph_trace_plugin_registered"] = True
