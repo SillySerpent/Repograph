@@ -29,6 +29,7 @@ _CONFTEST_TEMPLATE = '''\
 Delete this file to stop tracing.
 """
 from repograph.runtime.tracer import SysTracer as _ST
+from repograph.runtime.trace_policy import TracePolicy
 import pytest as _pytest
 
 _tracer = None
@@ -39,6 +40,7 @@ def pytest_sessionstart(session):
         repo_root={repo_root!r},
         repograph_dir={repograph_dir!r},
         session_name="pytest",
+        trace_policy={trace_policy_expr},
     )
     _tracer.start()
 
@@ -56,11 +58,13 @@ Delete to stop tracing.
 """
 import atexit as _atexit
 from repograph.runtime.tracer import SysTracer as _ST
+from repograph.runtime.trace_policy import TracePolicy
 
 _tracer = _ST(
     repo_root={repo_root!r},
     repograph_dir={repograph_dir!r},
     session_name="sitecustomize",
+    trace_policy={trace_policy_expr},
 )
 _tracer.start()
 _atexit.register(_tracer.stop)
@@ -108,12 +112,23 @@ class CoverageTracerPlugin(TracerPlugin):
         """
         repo_root = Path(repo_root).resolve()
         repograph_dir = str(trace_dir.parent)
+        policy_expr = (
+            "TracePolicy.from_kwargs("
+            f"max_records={int(kwargs.get('max_records') or 0)!r}, "
+            f"max_file_bytes={int(kwargs.get('max_file_bytes') or 0)!r}, "
+            f"rotate_files={int(kwargs.get('rotate_files') or 0)!r}, "
+            f"sample_rate={float(kwargs.get('sample_rate') or 1.0)!r}, "
+            f"include_pattern={str(kwargs.get('include_pattern') or '')!r}, "
+            f"exclude_pattern={str(kwargs.get('exclude_pattern') or '')!r}"
+            ")"
+        )
 
         if mode == "sitecustomize":
             config_path = repo_root / "sitecustomize.py"
             content = _SITECUSTOMIZE_TEMPLATE.format(
                 repo_root=str(repo_root),
                 repograph_dir=repograph_dir,
+                trace_policy_expr=policy_expr,
             )
         else:
             config_path = repo_root / "conftest.py"
@@ -130,6 +145,7 @@ class CoverageTracerPlugin(TracerPlugin):
             content = _CONFTEST_TEMPLATE.format(
                 repo_root=str(repo_root),
                 repograph_dir=repograph_dir,
+                trace_policy_expr=policy_expr,
             )
 
         trace_dir.mkdir(parents=True, exist_ok=True)

@@ -9,6 +9,7 @@ from repograph.runtime.trace_format import (
     trace_dir,
 )
 from repograph.runtime.tracer import SysTracer, trace_call
+from repograph.runtime.trace_policy import TracePolicy
 
 __all__ = [
     "TRACE_FORMAT",
@@ -20,4 +21,5 @@ __all__ = [
     "trace_dir",
     "SysTracer",
     "trace_call",
+    "TracePolicy",
 ]

@@ -41,11 +41,12 @@ from pathlib import Path
 from typing import Any
 
 from repograph.runtime.trace_format import (
-    TRACE_FILE_SUFFIX,
-    TRACE_FORMAT,
     make_session_record,
     trace_dir,
 )
+from repograph.runtime.trace_filters import TraceFilter
+from repograph.runtime.trace_policy import TracePolicy
+from repograph.runtime.trace_writer import TraceWriter
 
 
 class SysTracer:
@@ -72,12 +73,15 @@ class SysTracer:
         repograph_dir: str | Path,
         include_stdlib: bool = False,
         session_name: str = "trace",
+        trace_policy: TracePolicy | None = None,
     ) -> None:
         self.repo_root = str(Path(repo_root).resolve())
         self.repograph_dir = str(Path(repograph_dir).resolve())
         self.include_stdlib = include_stdlib
         self.session_name = session_name
-        self._file: Any = None
+        self.trace_policy = trace_policy or TracePolicy()
+        self._writer: TraceWriter | None = None
+        self._filter = TraceFilter(self.trace_policy)
         self._path: Path | None = None
         self._lock = threading.Lock()
         self._prev_trace = None
@@ -92,14 +96,15 @@ class SysTracer:
     def start(self) -> None:
         """Begin tracing."""
         out_dir = trace_dir(self.repograph_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        ts = int(time.time())
-        self._path = out_dir / f"{self.session_name}_{ts}{TRACE_FILE_SUFFIX}"
-        self._file = open(self._path, "w", encoding="utf-8", buffering=1)
+        self._writer = TraceWriter(out_dir, self.session_name, self.trace_policy)
+        self._writer.open()
+        self._path = self._writer.path
 
         # Write session header
-        self._write(make_session_record(self.repo_root))
+        self._write({
+            **make_session_record(self.repo_root),
+            "policy": self.trace_policy.as_dict(),
+        })
 
         self._prev_trace = sys.gettrace()
         sys.settrace(self._trace_fn)
@@ -109,10 +114,18 @@ class SysTracer:
         """Stop tracing and flush the output file."""
         sys.settrace(self._prev_trace)
         threading.settrace(self._prev_trace)
-        if self._file:
-            self._file.flush()
-            self._file.close()
-            self._file = None
+        if self._writer:
+            with self._lock:
+                self._write({
+                    "kind": "session_end",
+                    "ts": time.time(),
+                    "written_records": self._writer.stats.written_records,
+                    "dropped_records": self._writer.stats.dropped_records,
+                    "dropped_by_reason": dict(sorted(self._writer.stats.dropped_by_reason.items())),
+                    "rotated_files": self._writer.stats.rotated_files,
+                })
+                self._writer.close()
+                self._writer = None
 
     @property
     def trace_path(self) -> Path | None:
@@ -173,13 +186,18 @@ class SysTracer:
             "line": frame.f_lineno,
             "caller": caller_qn,
         }
+        decision = self._filter.allow(file_path=record["file"], qualified_name=qualified)
+        if not decision.accepted:
+            if self._writer:
+                self._writer.stats.drop(decision.reason or "filtered")
+            return self._trace_fn
         self._write(record)
         return self._trace_fn
 
     def _write(self, record: dict) -> None:
-        if self._file and not self._file.closed:
-            with self._lock:
-                self._file.write(json.dumps(record, separators=(",", ":")) + "\n")
+        if not self._writer:
+            return
+        self._writer.write(record)
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +210,7 @@ def trace_call(
     repo_root: str,
     repograph_dir: str,
     session_name: str = "trace",
+    trace_policy: TracePolicy | None = None,
     **kwargs,
 ) -> tuple[Any, Path | None]:
     """Run *fn(*args, **kwargs)* under trace. Return (result, trace_path).
@@ -208,6 +227,7 @@ def trace_call(
         repo_root=repo_root,
         repograph_dir=repograph_dir,
         session_name=session_name,
+        trace_policy=trace_policy,
     )
     with tracer:
         result = fn(*args, **kwargs)
