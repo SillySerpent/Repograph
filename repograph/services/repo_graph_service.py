@@ -32,6 +32,40 @@ from repograph.graph_store.store_queries_analytics import (
 from repograph.core.evidence import summarize_findings
 
 
+def _build_report_warnings(
+    *,
+    health: dict,
+    pathways_total: int,
+    pathways_shown: int,
+    communities_total: int,
+    communities_shown: int,
+    cfg_top: dict,
+    cfg_diag: dict,
+) -> list[str]:
+    warnings: list[str] = []
+    if health.get("sync_mode") == "incremental_traces_only":
+        warnings.append(
+            "Report reflects a trace-only incremental refresh; run a full sync for a full static rebuild snapshot."
+        )
+    if health.get("status") == "degraded":
+        warnings.append(
+            "Last sync completed with degraded health (one or more optional hooks failed)."
+        )
+    if pathways_total > pathways_shown:
+        warnings.append(
+            f"Pathways are capped in this report ({pathways_shown}/{pathways_total} shown)."
+        )
+    if communities_total > communities_shown:
+        warnings.append(
+            f"Communities are capped in this report ({communities_shown}/{communities_total} shown)."
+        )
+    if not cfg_top and cfg_diag.get("status"):
+        warnings.append(
+            f"Config registry empty ({cfg_diag.get('status')}); inspect config_registry_diagnostics for scan details."
+        )
+    return warnings
+
+
 class RepoGraphService:
     """High-level API for indexing and querying a repository with RepoGraph.
 
@@ -1098,19 +1132,15 @@ class RepoGraphService:
             and (f.get("runtime_observed_for_hash") or "") == (f.get("source_hash") or "")
         )
 
-        report_warnings: list[str] = []
-        if health.get("sync_mode") == "incremental_traces_only":
-            report_warnings.append(
-                "Report reflects a trace-only incremental refresh; run a full sync for a full static rebuild snapshot."
-            )
-        if health.get("status") == "degraded":
-            report_warnings.append(
-                "Last sync completed with degraded health (one or more optional hooks failed)."
-            )
-        if not cfg_top and cfg_diag.get("status"):
-            report_warnings.append(
-                f"Config registry empty ({cfg_diag.get('status')}); inspect config_registry_diagnostics for scan details."
-            )
+        report_warnings = _build_report_warnings(
+            health=health,
+            pathways_total=pathways_total,
+            pathways_shown=len(top_pathways_full),
+            communities_total=communities_total,
+            communities_shown=len(comms),
+            cfg_top=cfg_top,
+            cfg_diag=cfg_diag,
+        )
 
         return {
             "meta": {

@@ -74,6 +74,9 @@ def test_fire_on_traces_collected_runs_dynamic_overlay(simple_store, tmp_path) -
     )
     assert executions
     assert all(e.error is None for e in executions), [e.error for e in executions]
+    ids = {e.plugin_id for e in executions}
+    assert "dynamic_analyzer.runtime_overlay" in ids
+    assert "dynamic_analyzer.runtime_quality" in ids
 
 
 def test_dispatch_rejects_mismatched_hook() -> None:

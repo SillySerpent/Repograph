@@ -75,6 +75,10 @@ def test_report_json_stdout_parses(indexed_simple_repo):
     assert data["communities_summary"].get("shown") == len(data.get("communities", []))
     assert "config_registry_diagnostics" in data and isinstance(data["config_registry_diagnostics"], dict)
     assert "report_warnings" in data and isinstance(data["report_warnings"], list)
+    if data["pathways_summary"].get("total", 0) > data["pathways_summary"].get("shown", 0):
+        assert any("Pathways are capped" in w for w in data["report_warnings"])
+    if data["communities_summary"].get("total", 0) > data["communities_summary"].get("shown", 0):
+        assert any("Communities are capped" in w for w in data["report_warnings"])
     assert "test_coverage" in data and isinstance(data["test_coverage"], list)
     assert "test_coverage_any_call" in data and isinstance(
         data["test_coverage_any_call"], list
