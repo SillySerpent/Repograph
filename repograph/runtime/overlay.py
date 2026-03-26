@@ -127,11 +127,15 @@ def overlay_traces(
     call_counts: dict[str, int] = defaultdict(int)
     calls_by_function_id: dict[str, int] = defaultdict(int)
     new_edges: list[dict] = []
+    total_call_records = 0
+    resolved_call_records = 0
+    unresolved_examples: set[str] = set()
 
     for trace_file in trace_files:
         for record in iter_records(trace_file):
             if record.get("kind") != "call":
                 continue
+            total_call_records += 1
 
             fn_qn = record.get("fn", "")
             caller_qn = record.get("caller", "")
@@ -153,6 +157,9 @@ def overlay_traces(
                 if fn_id:
                     observed_fn_ids.add(fn_id)
                     calls_by_function_id[fn_id] += 1
+                    resolved_call_records += 1
+                elif fn_qn and len(unresolved_examples) < 50:
+                    unresolved_examples.add(fn_qn)
 
             # Detect new dynamic edges
             if fn_qn and caller_qn:
@@ -223,6 +230,10 @@ def overlay_traces(
         "findings": findings,
         "top_calls": sorted(call_counts.items(), key=lambda x: -x[1])[:20],
         "calls_by_function_id": dict(calls_by_function_id),
+        "trace_call_records": total_call_records,
+        "resolved_trace_calls": resolved_call_records,
+        "unresolved_trace_calls": max(0, total_call_records - resolved_call_records),
+        "unresolved_examples": sorted(unresolved_examples)[:20],
     }
 
 
@@ -236,6 +247,10 @@ def _empty_report() -> dict[str, Any]:
         "findings": [],
         "top_calls": [],
         "calls_by_function_id": {},
+        "trace_call_records": 0,
+        "resolved_trace_calls": 0,
+        "unresolved_trace_calls": 0,
+        "unresolved_examples": [],
     }
 
 

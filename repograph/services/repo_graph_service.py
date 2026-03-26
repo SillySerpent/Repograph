@@ -777,6 +777,20 @@ class RepoGraphService:
         except Exception:
             return {}
 
+    def config_registry_diagnostics(self) -> dict:
+        """Return exporter diagnostics for config_registry generation."""
+        import json as _json
+
+        meta_path = os.path.join(self.repograph_dir, "meta", "config_registry_diagnostics.json")
+        if not os.path.exists(meta_path):
+            return {}
+        try:
+            with open(meta_path, encoding="utf-8") as f:
+                payload = _json.load(f)
+            return payload if isinstance(payload, dict) else {}
+        except Exception:
+            return {}
+
     def test_coverage(self) -> list[dict]:
         """Return per-file *entry-point test reachability* (not line coverage).
 
@@ -1060,6 +1074,7 @@ class RepoGraphService:
         mods = self.modules()
         inv = self.invariants()
         cfg_reg = self.config_registry()
+        cfg_diag = self.config_registry_diagnostics()
         # Trim to top 30 config keys by usage
         cfg_top = dict(list(cfg_reg.items())[:30])
 
@@ -1082,6 +1097,20 @@ class RepoGraphService:
             if f.get("runtime_observed")
             and (f.get("runtime_observed_for_hash") or "") == (f.get("source_hash") or "")
         )
+
+        report_warnings: list[str] = []
+        if health.get("sync_mode") == "incremental_traces_only":
+            report_warnings.append(
+                "Report reflects a trace-only incremental refresh; run a full sync for a full static rebuild snapshot."
+            )
+        if health.get("status") == "degraded":
+            report_warnings.append(
+                "Last sync completed with degraded health (one or more optional hooks failed)."
+            )
+        if not cfg_top and cfg_diag.get("status"):
+            report_warnings.append(
+                f"Config registry empty ({cfg_diag.get('status')}); inspect config_registry_diagnostics for scan details."
+            )
 
         return {
             "meta": {
@@ -1116,6 +1145,7 @@ class RepoGraphService:
             "duplicates": dups,
             "invariants": inv,
             "config_registry": cfg_top,
+            "config_registry_diagnostics": cfg_diag,
             "test_coverage": test_cov,
             "coverage_definition": ENTRY_POINT_TEST_COVERAGE_DEFINITION,
             "test_coverage_any_call": test_cov_any,
@@ -1127,6 +1157,7 @@ class RepoGraphService:
                 "shown": len(comms),
                 "limit": 20,
             },
+            "report_warnings": report_warnings,
         }
 
     def pathway_document(self, name: str) -> str | None:

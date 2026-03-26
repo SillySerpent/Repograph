@@ -1186,6 +1186,8 @@ def report(
     _kv("Sync mode", health.get("sync_mode", "?"))
     _kv("Last sync", health.get("generated_at", "?"))
     _kv("Call edges", str(health.get("call_edges_total", "?")))
+    if health.get("partial_completion"):
+        _kv("Partial completion", "true", "yellow")
 
     # ── 2. Purpose ───────────────────────────────────────────────────────────
     if data.get("purpose"):
@@ -1285,6 +1287,12 @@ def report(
                 for line in preview_lines:
                     console.print(f"    [dim]{line}[/]")
             console.print()
+
+    warnings = data.get("report_warnings", [])
+    if warnings:
+        _hdr("Report Warnings")
+        for w in warnings:
+            console.print(f"  [yellow]-[/] {w}")
 
     # ── 7. Dead code ─────────────────────────────────────────────────────────
     dead = data.get("dead_code", {})
@@ -1997,6 +2005,9 @@ def trace_report(
         f"  Trace files:      {report['trace_file_count']}\n"
         f"  Observed fns:     {report['observed_fn_count']}\n"
         f"  New dynamic edges:{report['new_edge_count']}\n"
+        f"  Trace calls:      {report.get('trace_call_records', 0)}\n"
+        f"  Resolved calls:   {report.get('resolved_trace_calls', 0)}\n"
+        f"  Unresolved calls: {report.get('unresolved_trace_calls', 0)}\n"
         f"  Persisted to DB:  {persisted} function(s) (runtime_observed + dead flags cleared)\n"
     )
 
@@ -2021,6 +2032,11 @@ def trace_report(
         console.print(f"[bold blue]  {len(new_edges)} dynamic edge(s) not in static graph:[/]")
         for e in new_edges[:10]:
             console.print(f"  {e['caller']} → {e['callee']}  ({e['file']}:{e['line']})")
+    unresolved = report.get("unresolved_examples") or []
+    if unresolved:
+        console.print(f"[bold yellow]Unresolved trace symbols ({len(unresolved)} shown):[/]")
+        for u in unresolved[:10]:
+            console.print(f"  {u}")
 
 
 @trace_app.command("clear")

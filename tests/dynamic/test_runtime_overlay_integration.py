@@ -39,6 +39,9 @@ def test_overlay_traces_observes_call(simple_store, tmp_path) -> None:
     assert report["trace_file_count"] >= 1
     assert report["observed_fn_count"] >= 1
     assert qn in (report.get("observed_fns") or [])
+    assert report["trace_call_records"] >= 1
+    assert report["resolved_trace_calls"] >= 1
+    assert report["unresolved_trace_calls"] >= 0
 
 
 def test_runtime_overlay_plugin_returns_findings(simple_store, tmp_path) -> None:
