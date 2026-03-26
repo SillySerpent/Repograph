@@ -59,3 +59,23 @@ The doctor checks:
 - isolated-cwd import behavior
 - writable `.repograph/` location for the target repo
 - database openability when an index already exists
+
+## Runtime trace tuning
+
+If trace files become too large, install tracing with bounds/sampling:
+
+```bash
+repograph trace install --max-records 500000 --max-mb 128 --rotate-files 2 --sample-rate 0.2
+```
+
+For focused capture, add include/exclude filters:
+
+```bash
+repograph trace install --include "repograph/(pipeline|runtime)" --exclude "tests/"
+```
+
+Inspect collected volume before sync:
+
+```bash
+repograph trace collect --json
+```

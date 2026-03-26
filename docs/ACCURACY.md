@@ -100,6 +100,13 @@ the indexed repo root.
 
 **Runtime traces vs static dead code:** Sync runs static analyzers (including dead code) during `on_graph_built`, then runs dynamic overlay when `.repograph/runtime/*.jsonl` traces exist (`on_traces_collected`). The overlay resolves `call` records to graph functions and calls `apply_runtime_observation`, which clears `is_dead` and dead-code tier fields for those functions when the trace matches the current `source_hash`. Anything **not** seen in traces is unchanged by overlay—dynamic analysis does not “prove live” except through resolved JSONL `fn` → graph `qualified_name` matches. Later sync passes skip re-applying static dead flags while `runtime_observed_for_hash` still matches the file hash (see `repograph/plugins/static_analyzers/dead_code/plugin.py`). Full contract: `docs/ACCURACY_CONTRACT.md` (“Runtime traces merged into the graph”).
 
+Runtime overlay diagnostics now expose:
+- total call records seen from trace files,
+- resolved vs unresolved call counts,
+- unresolved symbol examples.
+
+This is intended to make “dynamic analysis provided little signal” measurable rather than opaque.
+
 ---
 
 ## Entry-Point Scoring
@@ -164,6 +171,8 @@ from scratch on changed files but may miss:
 
 **Recommendation:** run `repograph sync --full` after major refactors or when
 the call-edge count seems unexpectedly low.
+
+When latest sync mode is `incremental_traces_only`, reports represent a trace-overlay refresh over an existing static index, not a fresh full rebuild.
 
 ---
 

@@ -86,6 +86,8 @@ repograph report [PATH] [--json] [--pathways N] [--dead N]
 Pathway `context_doc` values include an **INTERPRETATION** section: steps follow
 BFS over `CALLS` edges, not guaranteed runtime order.
 
+`report --json` now includes capped-surface metadata (`pathways_summary`, `communities_summary`) and may include `report_warnings` (for example when the latest sync mode is `incremental_traces_only` or health is `degraded`).
+
 ---
 
 ## `repograph modules`
@@ -235,6 +237,55 @@ Show index health: node counts, stale artifacts, last sync time.
 
 ```
 repograph status [PATH]
+```
+
+Health status values:
+- `ok`: pipeline and hooks completed without recorded plugin failures.
+- `degraded`: sync completed but one or more optional hooks/plugins failed; inspect health hook summary.
+- `failed`: sync aborted.
+
+---
+
+## `repograph trace install`
+
+Install runtime tracing instrumentation for the next test/run session.
+
+```
+repograph trace install [PATH] [OPTIONS]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--mode / -m` | `pytest` (writes `conftest.py`) or `sitecustomize` |
+| `--max-records` | Max records per trace session (0 = unlimited) |
+| `--max-mb` | Max per-file trace size in MB before rotation/drop logic |
+| `--rotate-files` | Number of extra rotated files when `--max-mb` is hit |
+| `--sample-rate` | Call record sampling rate from `0.0` to `1.0` |
+| `--include` | Regex include filter over `file::qualified_name` |
+| `--exclude` | Regex exclude filter over `file::qualified_name` |
+
+---
+
+## `repograph trace collect`
+
+List collected traces under `.repograph/runtime/`.
+
+```
+repograph trace collect [PATH] [--json]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Emit trace inventory with record and byte totals |
+
+---
+
+## `repograph trace report`
+
+Summarize runtime overlay diagnostics and persistence impact.
+
+```
+repograph trace report [PATH] [--top N] [--json]
 ```
 
 ---
