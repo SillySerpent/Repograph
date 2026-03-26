@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from typing import Optional
 
@@ -231,6 +232,58 @@ def _print_stats(stats: dict) -> None:
     for key, val in stats.items():
         table.add_row(key.replace("_", " ").title(), str(val))
     console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# repograph test
+# ---------------------------------------------------------------------------
+
+def _test_profile_args(profile: str) -> list[str]:
+    p = (profile or "unit-fast").strip().lower()
+    if p == "unit-fast":
+        return ["tests/unit/", "-q", "-m", "not dynamic and not integration and not requires_mcp"]
+    if p == "plugin-dynamic":
+        return ["tests/", "-q", "-m", "plugin or dynamic"]
+    if p == "integration":
+        return ["tests/integration/", "-q"]
+    if p == "full":
+        return ["tests/", "-q"]
+    raise ValueError(
+        f"Unknown profile '{profile}'. Expected one of: unit-fast, plugin-dynamic, integration, full."
+    )
+
+
+@app.command("test")
+def test_command(
+    profile: str = typer.Option(
+        "unit-fast",
+        "--profile",
+        "-p",
+        help="Test matrix profile: unit-fast | plugin-dynamic | integration | full.",
+    ),
+    path: Optional[str] = typer.Argument(None, help="Repository root (default: current directory)."),
+    extra_args: Optional[list[str]] = typer.Argument(None, help="Extra pytest args passed through as-is."),
+) -> None:
+    """Run predefined test-suite matrix profiles.
+
+    Profiles use pytest markers and test paths, so they automatically include
+    new tests that match those selectors.
+    """
+    from repograph.config import get_repo_root
+
+    root = get_repo_root(path)
+    try:
+        profile_args = _test_profile_args(profile)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(2)
+
+    cmd = [sys.executable, "-m", "pytest", *profile_args, *(extra_args or [])]
+    console.print(f"[cyan]Running test profile:[/] {profile}")
+    console.print(f"[dim]{' '.join(cmd)}[/]")
+    r = subprocess.run(cmd, cwd=root)
+    if r.returncode != 0:
+        raise typer.Exit(r.returncode)
 
 
 # ---------------------------------------------------------------------------

@@ -78,6 +78,15 @@ pytest tests/integration/ -q
 pytest tests/ -q
 ```
 
+Equivalent via CLI profiles:
+
+```bash
+repograph test --profile unit-fast
+repograph test --profile plugin-dynamic
+repograph test --profile integration
+repograph test --profile full
+```
+
 For local reproducibility, prefer the project venv:
 
 ```bash

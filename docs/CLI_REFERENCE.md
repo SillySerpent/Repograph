@@ -320,6 +320,32 @@ repograph watch [PATH] [--no-git] [--strict]
 
 ---
 
+## `repograph test`
+
+Run predefined test-matrix profiles from the CLI.
+
+```
+repograph test [PATH] [--profile NAME] [EXTRA_PYTEST_ARGS...]
+```
+
+| Profile | Selector | Auto-includes new tests? |
+|---------|----------|---------------------------|
+| `unit-fast` | `tests/unit/ -m "not dynamic and not integration and not requires_mcp"` | Yes |
+| `plugin-dynamic` | `tests/ -m "plugin or dynamic"` | Yes |
+| `integration` | `tests/integration/` | Yes |
+| `full` | `tests/` | Yes |
+
+Example:
+
+```bash
+repograph test --profile plugin-dynamic -- -k runtime_overlay
+```
+
+Because selection is path/marker-based, new tests are picked up automatically
+when they match those selectors.
+
+---
+
 ## `repograph mcp`
 
 Start the MCP (Model Context Protocol) server.
