@@ -1,9 +1,15 @@
 """Coverage tracer plugin — instruments a repo and collects JSONL call traces.
 
 This is a TracerPlugin.  It:
-  - install():  writes a conftest.py or sitecustomize.py so the next test run
-                generates trace files in .repograph/runtime/
-  - collect():  returns the list of .jsonl files written
+  - install():  writes a conftest.py or sitecustomize.py inside
+                ``.repograph/`` so the next test run generates trace files in
+                ``.repograph/runtime/``.  Nothing is written to the repo root.
+  - collect():  returns the list of .jsonl files written.
+
+The conftest.py is placed at ``.repograph/conftest.py``.  Pytest discovers
+conftest files by walking the directory tree from the rootdir, so it picks
+up ``.repograph/conftest.py`` automatically when pytest is run from the repo
+root without any configuration changes.
 
 The trace files are in the ``jsonl_call_trace`` format defined in
 repograph.runtime.trace_format.  After collection, the
@@ -14,6 +20,9 @@ CLI usage
     repograph trace install    → calls install()
     repograph trace collect    → calls collect(), prints summary
     repograph sync             → on_traces_collected fires overlay
+
+Note: Routine users should prefer ``repograph sync --full``, which runs
+traced tests automatically without any manual install step.
 """
 from __future__ import annotations
 
@@ -21,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from repograph.core.plugin_framework import PluginManifest, TracerPlugin
-from repograph.runtime.trace_format import TRACE_FORMAT
+from repograph.runtime.trace_format import TRACE_FORMAT, live_trace_dir
 
 
 _CONFTEST_TEMPLATE = '''\
@@ -65,6 +74,8 @@ _tracer = _ST(
     repograph_dir={repograph_dir!r},
     session_name="sitecustomize",
     trace_policy={trace_policy_expr},
+    trace_subdir="live",
+    publish_live_session=True,
 )
 _tracer.start()
 _atexit.register(_tracer.stop)
@@ -94,7 +105,7 @@ class CoverageTracerPlugin(TracerPlugin):
         mode: str = "pytest",
         **kwargs: Any,
     ) -> dict:
-        """Write instrumentation config.
+        """Write instrumentation config inside ``.repograph/``.
 
         Parameters
         ----------
@@ -103,15 +114,20 @@ class CoverageTracerPlugin(TracerPlugin):
         trace_dir:
             Destination for trace files (``.repograph/runtime/``).
         mode:
-            ``"pytest"`` — write a conftest.py at repo root (default).
-            ``"sitecustomize"`` — write a sitecustomize.py (all Python runs).
+            ``"pytest"`` — write ``.repograph/conftest.py`` (default).
+            Pytest discovers it automatically when run from the repo root.
+            ``"sitecustomize"`` — write ``.repograph/sitecustomize.py``
+            (traces all Python processes launched from this tree).
 
         Returns
         -------
-        dict with keys: mode, config_path, trace_dir.
+        dict with keys: mode, config_path, trace_dir, status.
         """
         repo_root = Path(repo_root).resolve()
-        repograph_dir = str(trace_dir.parent)
+        repograph_dir_path = trace_dir.parent  # .repograph/
+        repograph_dir = str(repograph_dir_path)
+        repograph_dir_path.mkdir(parents=True, exist_ok=True)
+
         policy_expr = (
             "TracePolicy.from_kwargs("
             f"max_records={int(kwargs.get('max_records') or 0)!r}, "
@@ -124,15 +140,19 @@ class CoverageTracerPlugin(TracerPlugin):
         )
 
         if mode == "sitecustomize":
-            config_path = repo_root / "sitecustomize.py"
+            # sitecustomize.py lives inside .repograph/ so it never pollutes
+            # the repo root — users add .repograph to PYTHONPATH if needed.
+            config_path = repograph_dir_path / "sitecustomize.py"
+            effective_trace_dir = live_trace_dir(repograph_dir_path)
             content = _SITECUSTOMIZE_TEMPLATE.format(
                 repo_root=str(repo_root),
                 repograph_dir=repograph_dir,
                 trace_policy_expr=policy_expr,
             )
         else:
-            config_path = repo_root / "conftest.py"
-            # Append to existing conftest if present, don't overwrite
+            # conftest.py lives inside .repograph/ — pytest discovers it via
+            # its standard upward conftest scan when run from the repo root.
+            config_path = repograph_dir_path / "conftest.py"
             if config_path.exists():
                 existing = config_path.read_text(encoding="utf-8")
                 if "repograph" in existing:
@@ -142,19 +162,20 @@ class CoverageTracerPlugin(TracerPlugin):
                         "trace_dir": str(trace_dir),
                         "status": "already_installed",
                     }
+            effective_trace_dir = trace_dir
             content = _CONFTEST_TEMPLATE.format(
                 repo_root=str(repo_root),
                 repograph_dir=repograph_dir,
                 trace_policy_expr=policy_expr,
             )
 
-        trace_dir.mkdir(parents=True, exist_ok=True)
+        effective_trace_dir.mkdir(parents=True, exist_ok=True)
         config_path.write_text(content, encoding="utf-8")
 
         return {
             "mode": mode,
             "config_path": str(config_path),
-            "trace_dir": str(trace_dir),
+            "trace_dir": str(effective_trace_dir),
             "status": "installed",
         }
 
