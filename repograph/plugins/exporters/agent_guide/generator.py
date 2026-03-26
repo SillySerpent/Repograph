@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
-from repograph.config import AGENT_GUIDE_MAX_FILE_READ_BYTES as _MAX_FILE_READ_BYTES
+from repograph.settings import AGENT_GUIDE_MAX_FILE_READ_BYTES as _MAX_FILE_READ_BYTES
 from repograph.graph_store.store import GraphStore
 from repograph.utils import logging as rg_log
 
