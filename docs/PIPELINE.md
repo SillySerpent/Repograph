@@ -1,25 +1,27 @@
 # RepoGraph Pipeline Reference
 
-The analysis pipeline transforms a raw repository into a queryable graph.
-Each phase is a Python module in `repograph/pipeline/phases/` with a `run()`
-entry point. Phases run in numeric order; optional phases can fail without
-aborting the sync (unless `--strict` is set).
+RepoGraph runs in two layers:
+
+1. **Core graph-build phases** in `repograph/pipeline/phases/` (p01-p13).
+2. **Plugin hooks** after graph build (`on_graph_built`, `on_evidence`, `on_export`, runtime-trace hooks).
+
+Optional failures in optional phases/hooks are tolerated unless `--strict` is set.
 
 **Graph persistence:** all writes go through a single [`GraphStore`](../repograph/graph_store/store.py) (Kuzu) during the run — streaming MERGE/SET operations from phase modules (`store_writes_upserts.py`, `store_writes_rel.py`). Post-sync structural checks: `repograph.quality.run_sync_invariants`. See [`repograph/pipeline/README.md`](../repograph/pipeline/README.md) (Graph write path).
 
 ---
 
-## Phase Map
+## Execution Map
 
 ```
-p01 → p02 → p03 → p04 → p05 → p05b → p06 → p07 → p08
-                                                      ↓
-                              p13 ← p12 ← p11b ← p11 ← p10 ← p09
-                               ↓
-                              p14 → p15 → p16* → p17*
+p01 -> p02 -> p03 -> p04 -> p05 -> p05b -> p06 -> p07 -> p08 -> p09 -> p10
+                                                           \-> p12 (optional)
+                                                           \-> p13 (optional)
+then:
+on_graph_built -> on_evidence -> on_export
+if traces exist:
+on_traces_collected -> on_traces_analyzed
 ```
-
-`*` = planned, not yet implemented (see improvement plan).
 
 ---
 
@@ -223,15 +225,22 @@ Enables `search()` to use semantic similarity in addition to BM25 + fuzzy.
 
 ---
 
-### p14 · Pathway Context Document Generation
-**Module:** `p14_context.py`  
-**Required:** no  
-**Input:** store  
-**Output:** `context_doc` field populated on `Pathway` nodes
+### Post-build outputs (plugin hooks, not numbered core phases)
 
-Generates the human- and AI-readable context document for each pathway,
-including execution steps, config key dependencies, I/O annotations, and
-variable threads. Uses a token budget to fit within model context windows.
+Several user-facing outputs are produced by plugins via hooks instead of numbered phase modules:
+
+- pathway context documents
+- module summaries
+- config registry
+- invariants
+- doc warnings
+- runtime overlay summaries/findings
+
+See:
+
+- `repograph/pipeline/runner.py`
+- `repograph/plugins/`
+- `repograph/pipeline/README.md`
 
 ---
 
@@ -245,27 +254,6 @@ variable threads. Uses a token budget to fit within model context windows.
 Scans Markdown files for backtick-quoted symbol references and checks whether
 each still exists in the graph. Reports `moved_reference` when the path hint
 in the doc disagrees with the symbol's actual location.
-
----
-
-### p16 · Module Index *(planned — I-01)*
-**Module:** `p16_modules.py` *(not yet implemented)*
-
-Will aggregate per-directory statistics (file count, key classes, dead code
-flags, duplicate flags) and write `ModuleIndex` JSON to
-`.repograph/meta/modules.json`. Powers the `repograph modules` command.
-
----
-
-### p17 · Architectural Invariant Extraction *(planned — I-05)*
-**Module:** `p17_invariants.py` *(not yet implemented)*
-
-Will scan function and class docstrings for invariant markers (`INV-`,
-`INVARIANT:`, `CONTRACT:`, `NEVER`, `MUST NOT`, etc.) and store them as
-first-class `Invariant` nodes in the graph. Powers the `repograph invariants`
-command.
-
----
 
 ## Adding a New Phase
 

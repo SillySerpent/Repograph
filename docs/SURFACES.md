@@ -1,12 +1,12 @@
 # Surfaces: Python API, CLI, and MCP
 
-RepoGraph exposes one implementation layer — **`RepoGraphService`** (`repograph/services/repo_graph_service.py`) — through three surfaces. They are **not** feature-identical: the **CLI** and **Python API** are broad; **MCP** is a curated subset for AI agents.
+RepoGraph exposes one implementation layer — **`RepoGraphService`** (`repograph/services/repo_graph_service.py`) — through three surfaces. They are **not** feature-identical: the **CLI** and **Python API** are broad, while **MCP** is intentionally curated for agent workflows.
 
 ## Python API
 
 - Entry point: **`RepoGraph`** (`repograph/api.py`).
 - It delegates every attribute to **`RepoGraphService`** via `__getattr__`, so the public surface matches the service’s public methods (sync, pathways, dead_code, full_report, etc.).
-- Use this for scripts, tests, and applications that import RepoGraph as a library.
+- Use this for scripts, tests, and applications embedding RepoGraph.
 
 ## CLI
 
@@ -16,7 +16,7 @@ RepoGraph exposes one implementation layer — **`RepoGraphService`** (`repograp
 
 ### Trace subcommands
 
-Use **`repograph trace collect`** (not `collection`). **`repograph trace install`** sets up instrumentation; **`repograph sync`** overlays traces when `.repograph/runtime/` has data.
+Use **`repograph trace collect`** (not `collection`). `trace install` sets up instrumentation; `sync` overlays traces when `.repograph/runtime/` has data.
 
 ## MCP server
 

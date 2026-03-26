@@ -44,7 +44,8 @@ repograph sync [PATH] [OPTIONS]
 | `--no-git` | Skip git co-change coupling phase (Phase 12) |
 | `--strict` | Fail sync if any optional phase errors |
 | `--continue-on-error / --no-continue-on-error` | Control optional-phase failure behaviour |
-| `--include-tests-config-registry` | Phase 17: include test files when building `config_registry.json` |
+| `--include-tests-config-registry` | Include test files when building `config_registry.json` |
+| `--full-with-tests` | Run full sync, install tracer, run `pytest tests`, collect traces, then merge runtime overlay |
 
 ---
 
@@ -74,12 +75,13 @@ duplicates, modules, invariants, config registry, test coverage, doc warnings,
 communities).
 
 ```
-repograph report [PATH] [--json] [--pathways N] [--dead N]
+repograph report [PATH] [--json] [--full] [--pathways N] [--dead N]
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--json` | Print JSON only (no Rich markup); suitable for piping to a file |
+| `--full` | With `--json`, write output to `.repograph/report.json` instead of stdout |
 | `--pathways / -p N` | Max pathways to include (default 10) |
 | `--dead / -d N` | Max dead-code symbols per tier (default 20) |
 
@@ -154,6 +156,7 @@ repograph test-map [PATH] [OPTIONS]
 |------|-------------|
 | `--min-eps N` | Only show files with at least N entry points |
 | `--uncovered` | Only show files with 0% coverage |
+| `--any-call` | Use "any production function called by tests" metric instead of entry-point-only metric |
 | `--json` | Output as JSON |
 
 ---
@@ -290,12 +293,56 @@ repograph trace report [PATH] [--top N] [--json]
 
 ---
 
+## `repograph trace clear`
+
+Delete all trace files under `.repograph/runtime/`.
+
+```
+repograph trace clear [PATH] [--yes]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--yes / -y` | Skip confirmation prompt |
+
+---
+
 ## `repograph doctor`
 
 Verify Python environment, imports, and optional graph database.
 
 ```
 repograph doctor [PATH] [--verbose]
+```
+
+---
+
+## `repograph events`
+
+Show event publish/subscribe topology extracted by static analyzers.
+
+```
+repograph events [PATH] [--json]
+```
+
+---
+
+## `repograph interfaces`
+
+Show interface/base classes and discovered implementations.
+
+```
+repograph interfaces [PATH] [--json]
+```
+
+---
+
+## `repograph deps SYMBOL`
+
+Show constructor dependency hints for a class (from `__init__` parameters).
+
+```
+repograph deps <symbol> [--path PATH] [--depth N] [--json]
 ```
 
 ---
@@ -366,5 +413,11 @@ repograph mcp [PATH] [--port N]
 Delete the `.repograph/` directory entirely.
 
 ```
-repograph clean [PATH] [--yes / -y]
+repograph clean [PATH] [--yes / -y] [--dev] [--recursive/--no-recursive]
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--yes / -y` | Skip confirmation prompts |
+| `--dev / -d` | Also clean common local development artifacts (caches, venv dirs, build outputs, trace helpers) |
+| `--recursive / --no-recursive` | With `--dev`, scan whole repo tree (default) or only repo root |

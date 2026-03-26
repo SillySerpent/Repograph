@@ -1,27 +1,27 @@
 # Setup
 
-RepoGraph supports a small number of install paths depending on what you need to do.
+RepoGraph supports a few install paths depending on your goal.
 
-From a **git checkout**, you can bootstrap with **`./setup.sh`** (runs `scripts/repograph_setup.py`: venv, editable install, optional first-time profile menu, `repograph doctor`). After that, **`./run.sh`** offers a small menu (interactive CLI, doctor, help, status, or custom `repograph` args) or pass arguments through: `./run.sh sync --full`.
+From a **git checkout**, you can bootstrap with **`./setup.sh`** (runs `scripts/repograph_setup.py`: venv, editable install, optional first-time profile menu, `repograph doctor`). After that, **`./run.sh`** gives a guided runner (interactive menu, doctor, help, status, or custom args), or you can pass commands directly: `./run.sh sync --full`.
 
 ## Install tiers
 
 ### Core runtime
-Use this when you want to run the CLI/API against repositories and do not need test, MCP, or embedding extras.
+Use this if you only need the core CLI/API.
 
 ```bash
 python -m pip install -e .
 ```
 
 ### Community analysis
-Adds the optional community-detection stack.
+Adds optional community detection support.
 
 ```bash
 python -m pip install -e ".[community]"
 ```
 
 ### Development
-Adds test dependencies. Pair with `community` if you want the default analysis surface.
+Adds test dependencies. Pair with `community` for the common dev setup.
 
 ```bash
 python -m pip install -e ".[dev,community]"
@@ -35,7 +35,7 @@ python -m pip install -e ".[mcp,community]"
 ```
 
 ### Full local workstation
-Adds every optional dependency. This is the heaviest path because embeddings pull in the sentence-transformers / torch stack.
+Adds every optional dependency. This is the heaviest setup because embeddings pull in the sentence-transformers/torch stack.
 
 ```bash
 python -m pip install -e ".[dev,community,mcp,templates,embeddings]"
@@ -43,7 +43,7 @@ python -m pip install -e ".[dev,community,mcp,templates,embeddings]"
 
 ## Environment doctor
 
-Use the doctor after setup problems, parser import issues, or database lock confusion.
+Run the doctor when setup/import/database behavior looks wrong.
 
 ```bash
 python -m repograph doctor
@@ -62,7 +62,7 @@ The doctor checks:
 
 ## Runtime trace tuning
 
-If trace files become too large, install tracing with bounds/sampling:
+If trace files get too large, install tracing with bounds and sampling:
 
 ```bash
 repograph trace install --max-records 500000 --max-mb 128 --rotate-files 2 --sample-rate 0.2
