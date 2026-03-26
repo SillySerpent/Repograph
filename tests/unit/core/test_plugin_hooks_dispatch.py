@@ -88,3 +88,19 @@ def test_dispatch_rejects_mismatched_hook() -> None:
     assert plugin is not None
     with pytest.raises(TypeError, match="no matching method"):
         PluginHookScheduler._dispatch(plugin, "on_graph_built", {"store": None})
+
+
+def test_run_plugin_dispatches_runtime_quality(simple_store, tmp_path) -> None:
+    ensure_all_plugins_registered()
+    sched = get_hook_scheduler()
+    runtime = tmp_path / ".repograph" / "runtime"
+    runtime.mkdir(parents=True)
+    # no trace files -> empty/no findings is still a valid execution path
+    out = sched.run_plugin(
+        "dynamic_analyzer",
+        "dynamic_analyzer.runtime_quality",
+        trace_dir=runtime,
+        store=simple_store,
+        repo_root=str(tmp_path),
+    )
+    assert isinstance(out, list)

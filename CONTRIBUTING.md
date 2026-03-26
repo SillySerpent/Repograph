@@ -62,6 +62,29 @@ pytest tests/ --cov=repograph --cov-report=term-missing
 **Before every PR:** the full suite must pass with zero failures and zero
 new warnings.
 
+Recommended maintainable test matrix:
+
+```bash
+# Fast guardrail (unit + plugin dispatch)
+pytest tests/unit/ -q -m "not integration and not dynamic and not requires_mcp"
+
+# Dynamic/runtime surface
+pytest tests/ -q -m dynamic
+
+# Integration confidence
+pytest tests/integration/ -q
+
+# Full contract sweep (pre-release / CI nightly)
+pytest tests/ -q
+```
+
+For local reproducibility, prefer the project venv:
+
+```bash
+source .venv/bin/activate
+python --version
+```
+
 ---
 
 ## Code Style

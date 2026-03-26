@@ -1,10 +1,12 @@
 """Protocol for optional pipeline phases (after graph build, before hooks)."""
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, TYPE_CHECKING, Protocol, runtime_checkable
 
 from repograph.core.models import ParsedFile
-from repograph.graph_store.store import GraphStore
+
+if TYPE_CHECKING:
+    from repograph.graph_store.store import GraphStore
 
 
 @runtime_checkable
@@ -16,7 +18,7 @@ class PipelinePhasePlugin(Protocol):
     def run(
         self,
         *,
-        store: GraphStore,
+        store: "GraphStore",
         parsed: list[ParsedFile],
         repo_root: str,
         repograph_dir: str,

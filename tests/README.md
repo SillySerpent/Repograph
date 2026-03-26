@@ -35,6 +35,15 @@ pytest tests/ -m dynamic
 pytest tests/ -m requires_mcp
 ```
 
+### Suggested CI tiers
+
+Use layered jobs so failures are isolated and fast to triage:
+
+1. **unit-fast**: `pytest tests/unit/ -q -m "not dynamic"`
+2. **plugin-and-dynamic**: `pytest tests/ -q -m "plugin or dynamic"`
+3. **integration**: `pytest tests/integration/ -q`
+4. **full** (nightly/release): `pytest tests/ -q`
+
 ## Full sync vs incremental parity (expectations)
 
 Do **not** expect bit-identical graphs when comparing **full** vs **incremental** sync, or when **p09** uses **Leiden** vs the **connected-components fallback** (optional ``leidenalg`` / ``igraph``).

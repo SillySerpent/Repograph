@@ -37,3 +37,18 @@ def test_build_registry_with_diagnostics_empty_valid() -> None:
     assert reg == {}
     assert diag.get("status") == "empty_valid"
     assert diag.get("registry_keys") == 0
+
+
+class _FailingStore:
+    def get_all_pathways(self):
+        raise RuntimeError("boom")
+
+    def get_all_files(self):
+        raise RuntimeError("boom")
+
+
+def test_build_registry_with_diagnostics_empty_error() -> None:
+    reg, diag = build_registry_with_diagnostics(_FailingStore())
+    assert reg == {}
+    assert diag.get("status") == "empty_error"
+    assert diag.get("errors")
