@@ -32,7 +32,6 @@ Implementation notes
 from __future__ import annotations
 
 import inspect
-import json
 import os
 import sys
 import time

@@ -1181,7 +1181,7 @@ def report(
     _kv("Path", data["meta"]["repo_path"])
     health = data.get("health", {})
     h_status = health.get("status", "?")
-    h_color = "green" if h_status == "ok" else "red"
+    h_color = "green" if h_status == "ok" else "yellow" if h_status == "degraded" else "red"
     _kv("Health", h_status, h_color)
     _kv("Sync mode", health.get("sync_mode", "?"))
     _kv("Last sync", health.get("generated_at", "?"))
@@ -1263,8 +1263,10 @@ def report(
 
     # ── 6. Pathways ──────────────────────────────────────────────────────────
     pathways = data.get("pathways", [])
+    pw_summary = data.get("pathways_summary", {})
     if pathways:
-        _hdr(f"Top Pathways  ({len(pathways)} shown, full context docs included)")
+        total_pw = pw_summary.get("total", len(pathways))
+        _hdr(f"Top Pathways  ({len(pathways)} shown of {total_pw}, full context docs included)")
         for pw in pathways:
             name = pw.get("display_name") or pw.get("name", "?")
             conf = pw.get("confidence", 0)
@@ -1809,6 +1811,12 @@ def trace_install(
         "--mode", "-m",
         help="Instrumentation mode: 'pytest' (conftest.py) or 'sitecustomize'.",
     ),
+    max_records: int = typer.Option(0, "--max-records", help="Max records per trace session (0 = unlimited)."),
+    max_mb: int = typer.Option(0, "--max-mb", help="Max bytes per trace file in MB (0 = unlimited)."),
+    rotate_files: int = typer.Option(0, "--rotate-files", help="Rotate at most N extra files when max-mb is reached."),
+    sample_rate: float = typer.Option(1.0, "--sample-rate", help="Sampling rate for call records [0.0-1.0]."),
+    include_pattern: str = typer.Option("", "--include", help="Regex include filter on 'file::qualified_name'."),
+    exclude_pattern: str = typer.Option("", "--exclude", help="Regex exclude filter on 'file::qualified_name'."),
 ) -> None:
     """Write instrumentation config so the next test run generates call traces.
 
@@ -1835,7 +1843,17 @@ def trace_install(
     for tracer in tracers:
         if not isinstance(tracer, TracerPlugin):
             continue
-        result = tracer.install(Path(root), td, mode=mode)
+        result = tracer.install(
+            Path(root),
+            td,
+            mode=mode,
+            max_records=max_records,
+            max_file_bytes=max(0, int(max_mb)) * 1024 * 1024,
+            rotate_files=rotate_files,
+            sample_rate=sample_rate,
+            include_pattern=include_pattern,
+            exclude_pattern=exclude_pattern,
+        )
         status = result.get("status", "?")
         config_path = result.get("config_path", "")
         if status == "already_installed":
@@ -1856,6 +1874,7 @@ def trace_install(
 @trace_app.command("collect")
 def trace_collect(
     path: Optional[str] = typer.Argument(None),
+    as_json: bool = typer.Option(False, "--json", help="Output trace inventory as JSON."),
 ) -> None:
     """List trace files collected in .repograph/runtime/."""
     from repograph.config import get_repo_root, repograph_dir as rg_dir_fn
@@ -1877,13 +1896,41 @@ def trace_collect(
         return
 
     total_lines = 0
+    total_size_bytes = 0
+    rows: list[dict[str, int | str]] = []
     for f in files:
         try:
             lines = sum(1 for _ in open(f, encoding="utf-8", errors="replace"))
         except OSError:
             lines = 0
+        size_bytes = 0
+        try:
+            size_bytes = f.stat().st_size
+        except OSError:
+            size_bytes = 0
         total_lines += lines
-        console.print(f"  [cyan]{f.name}[/]  {lines:,} records")
+        total_size_bytes += size_bytes
+        rows.append({"name": f.name, "records": int(lines), "size_bytes": int(size_bytes)})
+
+    if as_json:
+        import json as _json
+
+        typer.echo(
+            _json.dumps(
+                {
+                    "trace_files": rows,
+                    "trace_file_count": len(rows),
+                    "total_records": total_lines,
+                    "total_size_bytes": total_size_bytes,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    for r in rows:
+        rec = r["records"] if isinstance(r.get("records"), int) else 0
+        console.print(f"  [cyan]{r['name']}[/]  {rec:,} records")
 
     console.print(f"\n[green]{len(files)} trace file(s), {total_lines:,} total records.[/]")
     console.print(

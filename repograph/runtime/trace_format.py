@@ -121,14 +121,15 @@ def make_session_record(
 def iter_records(trace_file: Path):
     """Yield parsed records from a JSONL trace file, skipping bad lines."""
     try:
-        for line in trace_file.read_text(encoding="utf-8", errors="replace").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
+        with trace_file.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
     except OSError:
         return
 

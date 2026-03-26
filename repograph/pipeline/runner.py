@@ -124,7 +124,7 @@ def _handle_optional_phase_failure(config: RunConfig, phase: str, exc: BaseExcep
     console.print(f"[yellow]Warning: {phase} failed: {exc}[/]")
 
 
-def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) -> None:
+def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) -> dict[str, object]:
     """Fire all post-graph-build plugin hooks in order.
 
     on_graph_built   — static analyzers run (includes dead_code, event_topology, etc.)
@@ -135,6 +135,14 @@ def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) 
     from repograph.plugins.lifecycle import get_hook_scheduler
 
     hooks = get_hook_scheduler()
+    summary: dict[str, object] = {"failed_count": 0, "warnings_count": 0, "failed": []}
+
+    def _mark_failed(hook_name: str, plugin_id: str, error: str) -> None:
+        summary["failed_count"] = int(summary.get("failed_count", 0)) + 1
+        summary["warnings_count"] = int(summary.get("warnings_count", 0)) + 1
+        failed = list(summary.get("failed") or [])
+        failed.append({"hook": hook_name, "plugin_id": plugin_id, "error": error[:500]})
+        summary["failed"] = failed
 
     # ── on_graph_built ───────────────────────────────────────────────────
     try:
@@ -149,7 +157,9 @@ def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) 
         for r in results:
             if not r.succeeded:
                 rg_log.warn(f"on_graph_built: {r.plugin_id} failed: {r.error}")
+                _mark_failed("on_graph_built", r.plugin_id, r.error or "")
     except Exception as exc:
+        _mark_failed("on_graph_built", "scheduler", f"{type(exc).__name__}: {exc}")
         _handle_optional_phase_failure(config, "on_graph_built hook", exc)
 
     # ── on_evidence ──────────────────────────────────────────────────────
@@ -163,7 +173,9 @@ def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) 
         for r in results:
             if not r.succeeded:
                 rg_log.warn(f"on_evidence: {r.plugin_id} failed: {r.error}")
+                _mark_failed("on_evidence", r.plugin_id, r.error or "")
     except Exception as exc:
+        _mark_failed("on_evidence", "scheduler", f"{type(exc).__name__}: {exc}")
         _handle_optional_phase_failure(config, "on_evidence hook", exc)
 
     # ── on_export ────────────────────────────────────────────────────────
@@ -177,7 +189,9 @@ def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) 
         for r in results:
             if not r.succeeded:
                 rg_log.warn(f"on_export: {r.plugin_id} failed: {r.error}")
+                _mark_failed("on_export", r.plugin_id, r.error or "")
     except Exception as exc:
+        _mark_failed("on_export", "scheduler", f"{type(exc).__name__}: {exc}")
         _handle_optional_phase_failure(config, "on_export hook", exc)
 
     # ── on_traces_collected (dynamic analysis) ───────────────────────────
@@ -193,6 +207,10 @@ def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) 
                 repo_root=config.repo_root,
                 config=config,
             )
+            for r in results:
+                if not r.succeeded:
+                    rg_log.warn(f"on_traces_collected: {r.plugin_id} failed: {r.error}")
+                    _mark_failed("on_traces_collected", r.plugin_id, r.error or "")
             hooks.fire("on_traces_analyzed", store=store, config=config)
             n_findings = sum(len(r.result or []) for r in results if r.succeeded)
             # Findings = alert-style rows only (e.g. static-dead ∩ observed, new dynamic
@@ -202,7 +220,9 @@ def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) 
                 f"(0 is normal if dead-code already skipped observed symbols)"
             )
         except Exception as exc:
+            _mark_failed("on_traces_collected", "scheduler", f"{type(exc).__name__}: {exc}")
             _handle_optional_phase_failure(config, "dynamic analysis hooks", exc)
+    return summary
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +325,7 @@ def run_full_pipeline(config: RunConfig) -> dict:
             progress.add_task("Running plugin hooks...", total=None)
 
         _run_experimental_pipeline_phases(config, store, parsed)
-        _fire_hooks(config, store, parsed)
+        hook_summary = _fire_hooks(config, store, parsed)
 
         staleness = StalenessTracker(config.repograph_dir)
         differ = IncrementalDiff(config.repograph_dir)
@@ -318,6 +338,7 @@ def run_full_pipeline(config: RunConfig) -> dict:
                 store, stats,
                 repo_root=config.repo_root, repograph_dir=config.repograph_dir,
                 sync_mode="full", files_walked=len(files), strict=config.strict,
+                hook_summary=hook_summary,
             ),
         )
         return stats
@@ -404,7 +425,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
                 p09_communities.run(store, min_community_size=config.min_community_size)
                 p10_processes.run(store)
                 _run_experimental_pipeline_phases(config, store, parsed)
-                _fire_hooks(config, store, parsed)
+                hook_summary = _fire_hooks(config, store, parsed)
                 differ.save_index(current_map)
                 staleness.save()
                 stats = store.get_stats()
@@ -415,6 +436,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
                         repo_root=config.repo_root, repograph_dir=config.repograph_dir,
                         sync_mode="incremental_traces_only", files_walked=len(current_files),
                         strict=config.strict,
+                        hook_summary=hook_summary,
                     ),
                 )
                 return stats
@@ -487,7 +509,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
 
         # ── PLUGIN HOOKS (same sequence as full pipeline) ─────────────────
         _run_experimental_pipeline_phases(config, store, parsed)
-        _fire_hooks(config, store, parsed)
+        hook_summary = _fire_hooks(config, store, parsed)
 
         differ.save_index(current_map)
         staleness.save()
@@ -499,6 +521,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
                 store, stats,
                 repo_root=config.repo_root, repograph_dir=config.repograph_dir,
                 sync_mode="incremental", files_walked=len(current_files), strict=config.strict,
+                hook_summary=hook_summary,
             ),
         )
         return stats

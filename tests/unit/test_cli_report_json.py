@@ -68,6 +68,11 @@ def test_report_json_stdout_parses(indexed_simple_repo):
     assert data["health"].get("status") == "ok"
     assert "stats" in data and isinstance(data["stats"], dict)
     assert "files" in data["stats"]
+    assert "pathways_summary" in data and isinstance(data["pathways_summary"], dict)
+    assert data["pathways_summary"].get("shown") == len(data.get("pathways", []))
+    assert data["pathways_summary"].get("total", 0) >= data["pathways_summary"].get("shown", 0)
+    assert "communities_summary" in data and isinstance(data["communities_summary"], dict)
+    assert data["communities_summary"].get("shown") == len(data.get("communities", []))
     assert "test_coverage" in data and isinstance(data["test_coverage"], list)
     assert "test_coverage_any_call" in data and isinstance(
         data["test_coverage_any_call"], list

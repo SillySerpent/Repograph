@@ -19,6 +19,7 @@ def build_health_report(
     sync_mode: str,
     files_walked: int | None = None,
     strict: bool = False,
+    hook_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Collect post-sync diagnostic counters (best-effort, never raises)."""
     report: dict[str, Any] = {
@@ -54,6 +55,16 @@ def build_health_report(
 
     report["status"] = "ok"
     report["strict"] = strict
+    hs = hook_summary or {}
+    failed = int(hs.get("failed_count") or 0)
+    report["hook_summary"] = {
+        "failed_count": failed,
+        "failed": hs.get("failed") or [],
+        "warnings_count": int(hs.get("warnings_count") or 0),
+    }
+    report["partial_completion"] = failed > 0
+    if failed > 0:
+        report["status"] = "degraded"
     return report
 
 

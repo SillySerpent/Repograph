@@ -165,6 +165,8 @@ class RepoGraphService:
                 "status": h.get("status"),
                 "error_phase": h.get("error_phase"),
                 "error_message": h.get("error_message"),
+                "partial_completion": h.get("partial_completion"),
+                "hook_summary": h.get("hook_summary"),
             }
 
         return stats
@@ -1032,6 +1034,7 @@ class RepoGraphService:
             all_pathways,
             key=lambda p: (-(p.get("importance_score") or 0), -(p.get("confidence") or 0)),
         )[:max_pathways]
+        pathways_total = len(all_pathways)
 
         store = self._get_store()
         top_pathways_full = []
@@ -1067,7 +1070,9 @@ class RepoGraphService:
         doc_warns = self.doc_warnings(min_severity="medium")
 
         # Communities
-        comms = self.communities()[:20]
+        all_comms = self.communities()
+        comms = all_comms[:20]
+        communities_total = len(all_comms)
 
         # Runtime overlay rows persisted in graph (see persist_runtime_overlay_to_store)
         all_fn = store.get_all_functions()
@@ -1090,6 +1095,11 @@ class RepoGraphService:
             "modules": mods,
             "entry_points": eps,
             "pathways": top_pathways_full,
+            "pathways_summary": {
+                "total": pathways_total,
+                "shown": len(top_pathways_full),
+                "limit": max_pathways,
+            },
             "runtime_observations": {
                 "functions_with_valid_runtime_revision": rt_valid,
                 "note": (
@@ -1112,6 +1122,11 @@ class RepoGraphService:
             "coverage_definition_any_call": ANY_CALL_TEST_COVERAGE_DEFINITION,
             "doc_warnings": doc_warns,
             "communities": comms,
+            "communities_summary": {
+                "total": communities_total,
+                "shown": len(comms),
+                "limit": 20,
+            },
         }
 
     def pathway_document(self, name: str) -> str | None:
