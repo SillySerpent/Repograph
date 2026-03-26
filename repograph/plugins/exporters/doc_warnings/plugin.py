@@ -8,7 +8,6 @@ Fires on: on_export
 """
 from __future__ import annotations
 
-import os
 import re
 
 from repograph.core.evidence import CAP_DOC_WARNINGS, SOURCE_STATIC, evidence_tag
@@ -48,7 +47,7 @@ class DocWarningsExporterPlugin(ExporterPlugin):
         flag_unknown = False
         if config is not None:
             try:
-                from repograph.config import load_doc_symbol_options
+                from repograph.settings import load_doc_symbol_options
                 repo_root = getattr(config, "repo_root", ".")
                 flag_unknown = load_doc_symbol_options(repo_root)["doc_symbols_flag_unknown"]
             except Exception as exc:
@@ -221,18 +220,14 @@ def _examples_only_skip_line_numbers(content):
 
 def _read_doc_file(md_path, store):
     try:
-        rows = store.query("MATCH (f:File) WHERE f.language = 'python' RETURN f.path LIMIT 1")
-        if not rows: return None
-        sample_rel = rows[0][0]
-        cwd = os.getcwd()
-        for _ in range(5):
-            if os.path.exists(os.path.join(cwd, sample_rel)):
-                abs_md = os.path.join(cwd, md_path)
-                if os.path.exists(abs_md):
-                    with open(abs_md, encoding="utf-8", errors="replace") as fh:
-                        return fh.read()
-                return None
-            cwd = os.path.dirname(cwd)
+        rows = store.query(
+            "MATCH (f:File {path: $p}) RETURN f.abs_path LIMIT 1",
+            {"p": md_path},
+        )
+        if not rows or not rows[0][0]:
+            return None
+        with open(rows[0][0], encoding="utf-8", errors="replace") as fh:
+            return fh.read()
     except Exception as exc:
         rg_log.warn_once(f"doc_warnings: failed reading markdown file {md_path}: {exc}")
     return None
