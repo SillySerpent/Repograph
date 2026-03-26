@@ -20,20 +20,44 @@ _ROUTE_DEC = re.compile(r"^(app|router|blueprint)\.(get|post|put|delete|patch|ro
 _TASK_DEC = re.compile(r"^(click\.command|celery\.task|schedule)", re.I)
 _HANDLE_NAME = re.compile(r"^(handle|on_|controller|view|route)", re.I)
 _ROUTE_FILE = re.compile(r"/(routes|handlers|views|api|endpoints|controllers)/", re.I)
+_CLI_SURFACE_FILE = re.compile(r"/surfaces/cli/commands/", re.I)
+_PIPELINE_RUNNER_FILE = re.compile(r"/pipeline/runner\.py$", re.I)
+_PARSER_INTERNAL_FILE = re.compile(r"/(plugins/parsers|parsing)/", re.I)
+_PIPELINE_PHASE_FILE = re.compile(r"/pipeline/phases/", re.I)
+_PLUGIN_INTERNAL_FILE = re.compile(r"/plugins/", re.I)
+_GRAPH_STORE_FILE = re.compile(r"/graph_store/", re.I)
 # Non-production script paths — delegated to path_classifier.SCRIPT_PATH_RE
 _SCRIPT_PATH = SCRIPT_PATH_RE
 _MAIN_MULT = 5.0
 _ROUTE_DEC_MULT = 4.0
 _TASK_DEC_MULT = 3.5
 _ROUTE_PATH_MULT = 3.0
+_CLI_SURFACE_MULT = 1.4
+_PIPELINE_ORCHESTRATOR_MULT = 2.0
 _EXPORT_MULT = 2.0
 _HANDLE_MULT = 1.5
 _ABC_IMPL_MULT = 2.5   # boost for concrete implementations of abstract methods (F-04)
 _SCRIPT_DEMOTE = 0.1   # 10× penalty for script/diagnostic paths
 # Single-leading-underscore helpers (_foo) are internal; demote vs public entry points.
 _PRIVATE_NAME_DEMOTE = 0.35
-_RESOURCE_LIFECYCLE_DEMOTE = 0.1
-_RESOURCE_LIFECYCLE_NAMES = frozenset({"close", "shutdown", "teardown", "dispose"})
+_PARSER_INTERNAL_DEMOTE = 0.18
+_PIPELINE_PHASE_RUN_DEMOTE = 0.2
+_PLUGIN_HOOK_DEMOTE = 0.35
+_GRAPH_QUERY_DEMOTE = 0.35
+_RESOURCE_LIFECYCLE_DEMOTE = 0.2
+_RESOURCE_LIFECYCLE_NAMES = frozenset(
+    {
+        "close",
+        "dispose",
+        "initialize",
+        "open",
+        "shutdown",
+        "start",
+        "stop",
+        "teardown",
+    }
+)
+_PLUGIN_HOOK_NAMES = frozenset({"analyze", "collect", "export", "run"})
 _MIN_SCORE = 0.5
 
 
@@ -127,6 +151,12 @@ def score_function_verbose(
     if _ROUTE_FILE.search(file_path):
         score *= _ROUTE_PATH_MULT
         applied.append(("route_file", _ROUTE_PATH_MULT))
+    if _CLI_SURFACE_FILE.search(file_path):
+        score *= _CLI_SURFACE_MULT
+        applied.append(("cli_surface", _CLI_SURFACE_MULT))
+    if _PIPELINE_RUNNER_FILE.search(file_path) and name.startswith("run_"):
+        score *= _PIPELINE_ORCHESTRATOR_MULT
+        applied.append(("pipeline_orchestrator", _PIPELINE_ORCHESTRATOR_MULT))
     if name == "__main__" or file_path.endswith("__main__.py"):
         score *= _MAIN_MULT
         applied.append(("__main__", _MAIN_MULT))
@@ -144,6 +174,33 @@ def score_function_verbose(
     if abc_implementor:
         score *= _ABC_IMPL_MULT
         applied.append(("abc_impl", _ABC_IMPL_MULT))
+
+    if (
+        name in {"parse", "parse_file"}
+        and _PARSER_INTERNAL_FILE.search(file_path)
+    ):
+        score *= _PARSER_INTERNAL_DEMOTE
+        applied.append(("parser_internal_demote", _PARSER_INTERNAL_DEMOTE))
+
+    if name == "run" and _PIPELINE_PHASE_FILE.search(file_path):
+        score *= _PIPELINE_PHASE_RUN_DEMOTE
+        applied.append(("pipeline_phase_run_demote", _PIPELINE_PHASE_RUN_DEMOTE))
+
+    if (
+        "." in qualified_name
+        and name in _PLUGIN_HOOK_NAMES
+        and _PLUGIN_INTERNAL_FILE.search(file_path)
+    ):
+        score *= _PLUGIN_HOOK_DEMOTE
+        applied.append(("plugin_hook_demote", _PLUGIN_HOOK_DEMOTE))
+
+    if (
+        name.startswith("get_")
+        and "." in qualified_name
+        and _GRAPH_STORE_FILE.search(file_path)
+    ):
+        score *= _GRAPH_QUERY_DEMOTE
+        applied.append(("graph_query_demote", _GRAPH_QUERY_DEMOTE))
 
     if (
         name in _RESOURCE_LIFECYCLE_NAMES
