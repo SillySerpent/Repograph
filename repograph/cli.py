@@ -253,6 +253,27 @@ def _test_profile_args(profile: str) -> list[str]:
     )
 
 
+def _test_profiles_catalog() -> dict[str, dict[str, str]]:
+    return {
+        "unit-fast": {
+            "selector": 'tests/unit/ -m "not dynamic and not integration and not requires_mcp"',
+            "description": "Fast unit-focused guardrail.",
+        },
+        "plugin-dynamic": {
+            "selector": 'tests/ -m "plugin or dynamic"',
+            "description": "Plugin dispatch and runtime-overlay focused tests.",
+        },
+        "integration": {
+            "selector": "tests/integration/",
+            "description": "Integration suite for end-to-end behavior.",
+        },
+        "full": {
+            "selector": "tests/",
+            "description": "Complete test suite.",
+        },
+    }
+
+
 @app.command("test")
 def test_command(
     profile: str = typer.Option(
@@ -260,6 +281,16 @@ def test_command(
         "--profile",
         "-p",
         help="Test matrix profile: unit-fast | plugin-dynamic | integration | full.",
+    ),
+    list_profiles: bool = typer.Option(
+        False,
+        "--list-profiles",
+        help="Print available test profiles and exit.",
+    ),
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit profile/run metadata as JSON.",
     ),
     path: Optional[str] = typer.Argument(None, help="Repository root (default: current directory)."),
     extra_args: Optional[list[str]] = typer.Argument(None, help="Extra pytest args passed through as-is."),
@@ -271,6 +302,20 @@ def test_command(
     """
     from repograph.config import get_repo_root
 
+    catalog = _test_profiles_catalog()
+    if list_profiles:
+        if as_json:
+            typer.echo(json.dumps({"profiles": catalog}, indent=2))
+            return
+        t = Table(title="repograph test profiles", show_header=True)
+        t.add_column("Profile", style="cyan")
+        t.add_column("Selector", style="dim")
+        t.add_column("Description")
+        for name, meta in catalog.items():
+            t.add_row(name, meta["selector"], meta["description"])
+        console.print(t)
+        return
+
     root = get_repo_root(path)
     try:
         profile_args = _test_profile_args(profile)
@@ -279,8 +324,21 @@ def test_command(
         raise typer.Exit(2)
 
     cmd = [sys.executable, "-m", "pytest", *profile_args, *(extra_args or [])]
-    console.print(f"[cyan]Running test profile:[/] {profile}")
-    console.print(f"[dim]{' '.join(cmd)}[/]")
+    if as_json:
+        typer.echo(
+            json.dumps(
+                {
+                    "profile": profile,
+                    "selector": catalog.get(profile, {}).get("selector", ""),
+                    "repo_root": root,
+                    "pytest_cmd": cmd,
+                },
+                indent=2,
+            )
+        )
+    else:
+        console.print(f"[cyan]Running test profile:[/] {profile}")
+        console.print(f"[dim]{' '.join(cmd)}[/]")
     r = subprocess.run(cmd, cwd=root)
     if r.returncode != 0:
         raise typer.Exit(r.returncode)

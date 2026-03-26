@@ -344,6 +344,11 @@ repograph test --profile plugin-dynamic -- -k runtime_overlay
 Because selection is path/marker-based, new tests are picked up automatically
 when they match those selectors.
 
+Useful options:
+
+- `--list-profiles` prints the available matrix profiles and exits.
+- `--json` emits machine-readable profile/run metadata (CI-friendly).
+
 ---
 
 ## `repograph mcp`
