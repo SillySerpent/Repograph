@@ -46,6 +46,9 @@ from repograph.runtime.trace_format import (
 from repograph.runtime.trace_filters import TraceFilter
 from repograph.runtime.trace_policy import TracePolicy
 from repograph.runtime.trace_writer import TraceWriter
+from repograph.observability import get_logger
+
+_logger = get_logger(__name__, subsystem="runtime")
 
 
 class SysTracer:

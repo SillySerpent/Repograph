@@ -10,6 +10,9 @@ from __future__ import annotations
 import json
 
 from repograph.services import RepoGraphService
+from repograph.observability import get_logger
+
+_logger = get_logger(__name__, subsystem="mcp")
 
 
 def create_server(service: RepoGraphService, *, port: int | None = None):

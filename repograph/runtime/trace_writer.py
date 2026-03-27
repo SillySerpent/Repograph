@@ -8,6 +8,9 @@ from typing import Any
 
 from repograph.runtime.trace_format import TRACE_FILE_SUFFIX
 from repograph.runtime.trace_policy import TracePolicy
+from repograph.observability import get_logger
+
+_logger = get_logger(__name__, subsystem="runtime")
 
 
 @dataclass
@@ -43,16 +46,41 @@ class TraceWriter:
     def stats(self) -> TraceWriteStats:
         return self._stats
 
+    def __enter__(self) -> "TraceWriter":
+        self.open()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        if self._file is not None:
+            _logger.warning(
+                "TraceWriter garbage collected with open file handle — call close() explicitly",
+                path=str(self._path),
+            )
+            try:
+                self._file.close()
+            except Exception:
+                pass
+            self._file = None
+
     def open(self) -> None:
         self._out_dir.mkdir(parents=True, exist_ok=True)
         self._path = self._next_path()
-        self._file = open(self._path, "w", encoding="utf-8", buffering=1)
+        try:
+            self._file = open(self._path, "w", encoding="utf-8", buffering=1)
+        except Exception:
+            self._file = None
+            raise
+        _logger.debug("trace file opened", path=str(self._path))
 
     def close(self) -> None:
         if self._file:
             self._file.flush()
             self._file.close()
             self._file = None
+            _logger.debug("trace file closed", path=str(self._path))
 
     def write(self, record: dict[str, Any]) -> bool:
         if self._file is None:
@@ -82,7 +110,12 @@ class TraceWriter:
         self.close()
         self._idx += 1
         self._path = self._next_path()
-        self._file = open(self._path, "w", encoding="utf-8", buffering=1)
+        try:
+            self._file = open(self._path, "w", encoding="utf-8", buffering=1)
+        except Exception:
+            self._file = None
+            raise
         self._stats.rotated_files += 1
         self._stats.bytes_written = 0
+        _logger.debug("trace file rotated", path=str(self._path), rotation_index=self._idx)
         return True

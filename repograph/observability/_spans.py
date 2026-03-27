@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import functools
 import time
+import traceback as _traceback
 import uuid
 from contextlib import contextmanager
 from typing import Any, Callable, Generator, TypeVar
@@ -100,11 +101,18 @@ def span(
             **{**metadata, **ctx._meta},
         )
     except Exception as exc:
+        # Capture exception details here in the except block — sys.exc_info()
+        # is not reliably available from nested function calls inside a
+        # @contextmanager generator's except clause, so we extract explicitly.
         duration_ms = round((time.perf_counter() - t0) * 1000, 2)
+        exc_tb_str = "".join(_traceback.format_exception(type(exc), exc, exc.__traceback__)).strip()
         _span_logger.error(
             f"[span] {operation} failed: {type(exc).__name__}: {exc}",
             operation=operation,
             duration_ms=duration_ms,
+            exc_type=type(exc).__name__,
+            exc_msg=str(exc),
+            exc_tb=exc_tb_str,
             **metadata,
         )
         raise

@@ -19,6 +19,9 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich import print as rprint
+from repograph.observability import get_logger, new_run_id, set_obs_context
+
+_logger = get_logger(__name__, subsystem="cli")
 
 app = typer.Typer(
     name="repograph",
@@ -41,6 +44,14 @@ trace_app = typer.Typer(
 app.add_typer(trace_app, name="trace")
 
 console = Console()
+
+
+@app.callback()
+def _cli_startup(ctx: typer.Context) -> None:
+    """Set a stable command_id on the observability context for every CLI invocation."""
+    command_id = new_run_id()
+    set_obs_context(command_id=command_id)
+    _logger.debug("CLI invoked", command=ctx.invoked_subcommand, command_id=command_id)
 
 
 def _get_root_and_store(repo_path: str | None = None):

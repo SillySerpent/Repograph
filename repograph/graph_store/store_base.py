@@ -7,13 +7,15 @@ from typing import Any
 from repograph.graph_store.kuzu_loader import kuzu
 from repograph.graph_store.schema import ALL_NODE_TABLES, ALL_REL_TABLES
 from repograph.graph_store.store_utils import _delete_db_dir
-from repograph.observability import get_logger
+from repograph.observability import ObservableMixin, get_logger
 
 _logger = get_logger(__name__, subsystem="graph_store")
 
 
-class GraphStoreBase:
+class GraphStoreBase(ObservableMixin):
     """Connection handle, schema initialization, and raw Cypher execution."""
+
+    _obs_subsystem = "graph_store"
 
     def __init__(self, db_path: str) -> None:
         from repograph.exceptions import RepographDBLockedError

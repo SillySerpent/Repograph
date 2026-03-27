@@ -365,8 +365,10 @@ def run_full_pipeline(config: RunConfig) -> dict:
     except BaseException as exc:
         partial = None
         if store is not None:
-            try: partial = store.get_stats()
-            except Exception: pass
+            try:
+                partial = store.get_stats()
+            except Exception as stats_exc:
+                _logger.warning("store.get_stats() failed during error recovery", exc_msg=str(stats_exc))
         try:
             write_health_json(
                 config.repograph_dir,
@@ -377,15 +379,18 @@ def run_full_pipeline(config: RunConfig) -> dict:
                     partial_stats=partial,
                 ),
             )
-        except Exception: pass
+        except Exception as health_exc:
+            _logger.warning("write_health_json failed during error recovery", exc_msg=str(health_exc))
         _logger.error("full pipeline failed", exc_type=type(exc).__name__, exc_msg=str(exc))
         console.print(f"[red bold]Sync failed:[/] {exc}")
         raise
     finally:
         clear_sync_lock(config.repograph_dir)
         if store is not None:
-            try: store.close()
-            except Exception: pass
+            try:
+                store.close()
+            except Exception as close_exc:
+                _logger.warning("store.close() failed during cleanup", exc_msg=str(close_exc))
         shutdown_observability()
 
 
@@ -558,8 +563,10 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
     except BaseException as exc:
         partial = None
         if store is not None:
-            try: partial = store.get_stats()
-            except Exception: pass
+            try:
+                partial = store.get_stats()
+            except Exception as stats_exc:
+                _logger.warning("store.get_stats() failed during error recovery", exc_msg=str(stats_exc))
         try:
             write_health_json(
                 config.repograph_dir,
@@ -570,15 +577,18 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
                     partial_stats=partial,
                 ),
             )
-        except Exception: pass
+        except Exception as health_exc:
+            _logger.warning("write_health_json failed during error recovery", exc_msg=str(health_exc))
         _logger.error("incremental pipeline failed", exc_type=type(exc).__name__, exc_msg=str(exc))
         console.print(f"[red bold]Incremental sync failed:[/] {exc}")
         raise
     finally:
         clear_sync_lock(config.repograph_dir)
         if store is not None:
-            try: store.close()
-            except Exception: pass
+            try:
+                store.close()
+            except Exception as close_exc:
+                _logger.warning("store.close() failed during cleanup", exc_msg=str(close_exc))
         shutdown_observability()
 
 
