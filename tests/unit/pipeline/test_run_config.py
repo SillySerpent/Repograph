@@ -21,7 +21,7 @@ def _valid_config(tmp_path, **overrides):
         full=True,
     )
     defaults.update(overrides)
-    return RunConfig(**defaults)
+    return RunConfig(**defaults)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------

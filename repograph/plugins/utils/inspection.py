@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from hashlib import sha256
 from pathlib import Path
-from typing import Optional
 
 from repograph.core.models import FileRecord, ParsedFile
 from repograph.plugins.parsers import ensure_default_parsers_registered, parse_file as _parse_file
@@ -21,7 +20,7 @@ _LANGUAGE_BY_EXT = {
 }
 
 
-def build_file_record(repo_path: Path, rel_path: str, *, text: Optional[str] = None) -> FileRecord | None:
+def build_file_record(repo_path: Path, rel_path: str, *, text: str | None = None) -> FileRecord | None:
     ext = Path(rel_path).suffix.lower()
     language = _LANGUAGE_BY_EXT.get(ext)
     if language is None:
@@ -47,7 +46,7 @@ def build_file_record(repo_path: Path, rel_path: str, *, text: Optional[str] = N
     )
 
 
-def parse_file_with_plugins(repo_path: Path, rel_path: str, *, text: Optional[str] = None) -> ParsedFile | None:
+def parse_file_with_plugins(repo_path: Path, rel_path: str, *, text: str | None = None) -> ParsedFile | None:
     file_record = build_file_record(repo_path, rel_path, text=text)
     if file_record is None:
         return None

@@ -11,7 +11,6 @@ import json
 import os
 import subprocess
 import sys
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -117,7 +116,7 @@ def _get_service(path: str | None = None):
 
 @app.command()
 def init(
-    path: Optional[str] = typer.Argument(None, help="Repo root (default: current dir)"),
+    path: str | None = typer.Argument(None, help="Repo root (default: current dir)"),
     force: bool = typer.Option(False, "--force", "-f", help="Re-initialize even if already done"),
 ):
     """Initialize RepoGraph in a repository."""
@@ -153,7 +152,7 @@ def init(
 
 @app.command()
 def sync(
-    path: Optional[str] = typer.Argument(
+    path: str | None = typer.Argument(
         None,
         help="Repository root (default: current directory). Do not pass “full” here — use --full.",
     ),
@@ -333,8 +332,8 @@ def test_command(
         "--json",
         help="Emit profile/run metadata as JSON.",
     ),
-    path: Optional[str] = typer.Argument(None, help="Repository root (default: current directory)."),
-    extra_args: Optional[list[str]] = typer.Argument(None, help="Extra pytest args passed through as-is."),
+    path: str | None = typer.Argument(None, help="Repository root (default: current directory)."),
+    extra_args: list[str] | None = typer.Argument(None, help="Extra pytest args passed through as-is."),
 ) -> None:
     """Run predefined test-suite matrix profiles.
 
@@ -394,7 +393,7 @@ def test_command(
 # ---------------------------------------------------------------------------
 
 @app.command()
-def status(path: Optional[str] = typer.Argument(None)):
+def status(path: str | None = typer.Argument(None)):
     """Show index health: node counts, stale artifacts, last sync time."""
     root, store = _get_root_and_store(path)
     from repograph.config import repograph_dir
@@ -458,7 +457,7 @@ def status(path: Optional[str] = typer.Argument(None)):
 
 @app.command()
 def summary(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     as_json: bool = typer.Option(False, "--json", help="Output as machine-readable JSON."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show entry-point score breakdowns."),
 ):
@@ -624,7 +623,7 @@ def summary(
 
 @app.command()
 def doctor(
-    path: Optional[str] = typer.Argument(None, help="Repo root (tests DB open if initialized)"),
+    path: str | None = typer.Argument(None, help="Repo root (tests DB open if initialized)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show pip show repograph"),
 ):
     """Verify Python environment, imports, and optional graph database."""
@@ -635,8 +634,8 @@ def doctor(
 
 @app.command(name="config")
 def config_cmd(
-    path: Optional[str] = typer.Argument(None),
-    key: Optional[str] = typer.Option(None, "--key", "-k", help="Show consumers of a single config key."),
+    path: str | None = typer.Argument(None),
+    key: str | None = typer.Option(None, "--key", "-k", help="Show consumers of a single config key."),
     top: int = typer.Option(20, "--top", "-n", help="Number of keys to show (default 20)."),
     as_json: bool = typer.Option(False, "--json", help="Output as machine-readable JSON."),
     include_tests: bool = typer.Option(
@@ -746,7 +745,7 @@ def config_cmd(
 
 @app.command()
 def modules(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     min_files: int = typer.Option(1, "--min-files", "-m", help="Hide modules with fewer than N files."),
     issues_only: bool = typer.Option(False, "--issues", help="Only show modules with dead code or duplicates."),
     as_json: bool = typer.Option(False, "--json", help="Output as machine-readable JSON."),
@@ -863,7 +862,7 @@ def modules(
 
 @app.command("events")
 def events_cmd(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     as_json: bool = typer.Option(False, "--json", help="Output as JSON."),
 ) -> None:
     """Event topology: publish/subscribe style call sites (Phase 19)."""
@@ -890,7 +889,7 @@ def events_cmd(
 
 @app.command("interfaces")
 def interfaces_cmd(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     as_json: bool = typer.Option(False, "--json", help="Output as JSON."),
 ) -> None:
     """Interface map: classes with EXTENDS/IMPLEMENTS edges."""
@@ -917,7 +916,7 @@ def interfaces_cmd(
 @app.command("deps")
 def deps_cmd(
     symbol: str = typer.Argument(..., help="Class name (unqualified)"),
-    path: Optional[str] = typer.Option(None, "--path", help="Repository root"),
+    path: str | None = typer.Option(None, "--path", help="Repository root"),
     depth: int = typer.Option(2, "--depth", "-d", help="Recursion depth (reserved)."),
     as_json: bool = typer.Option(False, "--json", help="Output as JSON."),
 ) -> None:
@@ -965,8 +964,8 @@ def deps_cmd(
 
 @app.command()
 def invariants(
-    path: Optional[str] = typer.Argument(None),
-    type_filter: Optional[str] = typer.Option(None, "--type", "-t",
+    path: str | None = typer.Argument(None),
+    type_filter: str | None = typer.Option(None, "--type", "-t",
         help="Filter by type: constraint | guarantee | thread | lifecycle"),
     as_json: bool = typer.Option(False, "--json", help="Output as JSON."),
 ) -> None:
@@ -1024,7 +1023,7 @@ def invariants(
 
 @app.command(name="test-map")
 def test_map(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     min_eps: int = typer.Option(1, "--min-eps", help="Only show files with at least N entry points."),
     uncovered_only: bool = typer.Option(False, "--uncovered", help="Only show files with 0% coverage."),
     as_json: bool = typer.Option(False, "--json", help="Output as JSON."),
@@ -1135,7 +1134,7 @@ def test_map(
 
 @pathway_app.command("list")
 def pathway_list(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     include_tests: bool = typer.Option(
         False, "--include-tests",
         help="Include auto-detected test pathways in the list.",
@@ -1197,7 +1196,7 @@ def pathway_list(
 @pathway_app.command("show")
 def pathway_show(
     name: str = typer.Argument(..., help="Pathway name"),
-    path: Optional[str] = typer.Argument(None, help="Repo path (defaults to cwd)"),
+    path: str | None = typer.Argument(None, help="Repo path (defaults to cwd)"),
 ):
     """Print the full context document for a pathway."""
     root, store = _get_root_and_store(path)
@@ -1230,7 +1229,7 @@ def pathway_show(
 @pathway_app.command("update")
 def pathway_update(
     name: str = typer.Argument(..., help="Pathway name"),
-    path: Optional[str] = typer.Option(None, "--path"),
+    path: str | None = typer.Option(None, "--path"),
 ):
     """Re-generate context document for a single pathway."""
     root, store = _get_root_and_store(path)
@@ -1269,7 +1268,7 @@ def pathway_update(
 
 @app.command()
 def report(
-    path: Optional[str] = typer.Argument(
+    path: str | None = typer.Argument(
         None,
         help="Repository root (default: current directory). Do not use a bare “full” as the path — use --full.",
     ),
@@ -1601,7 +1600,7 @@ def report(
 @app.command()
 def node(
     identifier: str = typer.Argument(..., help="File path or symbol qualified name"),
-    path: Optional[str] = typer.Option(None, "--path"),
+    path: str | None = typer.Option(None, "--path"),
 ):
     """Show structured truth for a file or symbol."""
     root, store = _get_root_and_store(path)
@@ -1656,7 +1655,7 @@ def node(
 def impact(
     symbol: str = typer.Argument(..., help="Symbol name or qualified name"),
     depth: int = typer.Option(3, "--depth", "-d"),
-    path: Optional[str] = typer.Option(None, "--path"),
+    path: str | None = typer.Option(None, "--path"),
 ):
     """Blast radius: everything that calls or imports this symbol."""
     root, store = _get_root_and_store(path)
@@ -1713,7 +1712,7 @@ def impact(
 def query(
     text: str = typer.Argument(..., help="Search query"),
     limit: int = typer.Option(10, "--limit", "-n"),
-    path: Optional[str] = typer.Option(None, "--path"),
+    path: str | None = typer.Option(None, "--path"),
 ):
     """Hybrid search: BM25 + fuzzy name search."""
     root, store = _get_root_and_store(path)
@@ -1747,7 +1746,7 @@ def query(
 
 @app.command()
 def watch(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     no_git: bool = typer.Option(False, "--no-git"),
     strict: bool = typer.Option(False, "--strict", help="Same as sync --strict for incremental rebuilds."),
 ):
@@ -1826,8 +1825,8 @@ def watch(
 
 @app.command()
 def mcp(
-    path: Optional[str] = typer.Argument(None),
-    port: Optional[int] = typer.Option(None, "--port", help="HTTP port (default: stdio)"),
+    path: str | None = typer.Argument(None),
+    port: int | None = typer.Option(None, "--port", help="HTTP port (default: stdio)"),
 ):
     """Start the MCP server."""
     from repograph.mcp.server import create_server
@@ -1850,7 +1849,7 @@ def mcp(
 @app.command()
 def export(
     output: str = typer.Option("repograph_export.json", "--output", "-o"),
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
 ):
     """Export the full graph as JSON."""
     root, store = _get_root_and_store(path)
@@ -1874,7 +1873,7 @@ def export(
 
 @app.command()
 def clean(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     yes: bool = typer.Option(
         False,
         "--yes",
@@ -1974,7 +1973,7 @@ def clean(
 
 @trace_app.command("install")
 def trace_install(
-    path: Optional[str] = typer.Argument(None, help="Repository root (default: cwd)."),
+    path: str | None = typer.Argument(None, help="Repository root (default: cwd)."),
     mode: str = typer.Option(
         "pytest",
         "--mode", "-m",
@@ -2000,8 +1999,8 @@ def trace_install(
     try:
         root = get_repo_root(path)
     except RepographNotFoundError:
-        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
-        raise typer.Exit(1)
+        # trace install does not require an initialized index — work from the given path
+        root = os.path.abspath(path or os.getcwd())
     rg_dir = rg_dir_fn(root)
     td = trace_dir(rg_dir)
 
@@ -2047,7 +2046,7 @@ def trace_install(
 
 @trace_app.command("collect")
 def trace_collect(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     as_json: bool = typer.Option(False, "--json", help="Output trace inventory as JSON."),
 ) -> None:
     """List trace files collected in .repograph/runtime/."""
@@ -2121,7 +2120,7 @@ def trace_collect(
 
 @trace_app.command("report")
 def trace_report(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     top: int = typer.Option(20, "--top", "-n", help="Number of top-called functions to show."),
     json_out: bool = typer.Option(False, "--json", help="Output as JSON."),
 ) -> None:
@@ -2217,7 +2216,7 @@ def trace_report(
 
 @trace_app.command("clear")
 def trace_clear(
-    path: Optional[str] = typer.Argument(None),
+    path: str | None = typer.Argument(None),
     yes: bool = typer.Option(False, "--yes", "-y"),
 ) -> None:
     """Delete all collected trace files from .repograph/runtime/."""

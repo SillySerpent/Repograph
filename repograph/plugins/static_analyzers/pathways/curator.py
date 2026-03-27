@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 import yaml
 
@@ -69,10 +68,10 @@ class PathwayCurator:
             if defn.entry_function:
                 self._by_entry_function[defn.entry_function] = defn
 
-    def get(self, name: str) -> Optional[CuratedPathwayDef]:
+    def get(self, name: str) -> CuratedPathwayDef | None:
         return self._defs.get(name)
 
-    def get_by_entry_function(self, func_name: str) -> Optional[CuratedPathwayDef]:
+    def get_by_entry_function(self, func_name: str) -> CuratedPathwayDef | None:
         return self._by_entry_function.get(func_name)
 
     def all_defs(self) -> list[CuratedPathwayDef]:

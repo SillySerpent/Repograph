@@ -41,6 +41,7 @@ import sys
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
@@ -166,7 +167,7 @@ def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) 
     from repograph.plugins.lifecycle import get_hook_scheduler
 
     hooks = get_hook_scheduler()
-    summary: dict[str, object] = {"failed_count": 0, "warnings_count": 0, "failed": []}
+    summary: dict[str, Any] = {"failed_count": 0, "warnings_count": 0, "failed": []}
 
     def _mark_failed(hook_name: str, plugin_id: str, error: str) -> None:
         summary["failed_count"] = int(summary.get("failed_count", 0)) + 1

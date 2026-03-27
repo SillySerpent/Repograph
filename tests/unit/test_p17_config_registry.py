@@ -33,7 +33,7 @@ class _EmptyStore:
 
 
 def test_build_registry_with_diagnostics_empty_valid() -> None:
-    reg, diag = build_registry_with_diagnostics(_EmptyStore())
+    reg, diag = build_registry_with_diagnostics(_EmptyStore())  # type: ignore[arg-type]
     assert reg == {}
     assert diag.get("status") == "empty_valid"
     assert diag.get("registry_keys") == 0
@@ -48,7 +48,7 @@ class _FailingStore:
 
 
 def test_build_registry_with_diagnostics_empty_error() -> None:
-    reg, diag = build_registry_with_diagnostics(_FailingStore())
+    reg, diag = build_registry_with_diagnostics(_FailingStore())  # type: ignore[arg-type]
     assert reg == {}
     assert diag.get("status") == "empty_error"
     assert diag.get("errors")

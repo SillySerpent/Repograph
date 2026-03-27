@@ -10,7 +10,7 @@ class _Store:
 
 def test_health_degraded_when_hook_failures_present(tmp_path) -> None:
     report = build_health_report(
-        _Store(),
+        _Store(),  # type: ignore[arg-type]
         {"files": 1},
         repo_root=str(tmp_path),
         repograph_dir=str(tmp_path / ".repograph"),

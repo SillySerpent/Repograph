@@ -23,6 +23,7 @@ Usage
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 from repograph.config import DEFAULT_CONTEXT_TOKENS as _DEFAULT_CONTEXT_TOKENS
@@ -1296,8 +1297,7 @@ class RepoGraphService(ObservableMixin):
     # Observability log access
     # ------------------------------------------------------------------
 
-    def _log_dir(self) -> "Path":
-        from pathlib import Path
+    def _log_dir(self) -> Path:
         return Path(self.repograph_dir) / "logs"
 
     def list_log_sessions(self) -> list[dict]:
@@ -1382,8 +1382,7 @@ class RepoGraphService(ObservableMixin):
                     pass
         return records[-limit:]
 
-    def _resolve_run_dir(self, log_dir: "Path", run_id: str | None) -> "Path | None":
-        from pathlib import Path
+    def _resolve_run_dir(self, log_dir: Path, run_id: str | None) -> Path | None:
         if not log_dir.exists():
             return None
         if run_id:

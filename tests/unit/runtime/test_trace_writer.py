@@ -38,6 +38,7 @@ def test_context_manager_writes_records(tmp_path: Path):
         w.write({"event": "hello"})
         path = w.path
 
+    assert path is not None
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     record = json.loads(lines[0])

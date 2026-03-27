@@ -8,7 +8,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -93,7 +92,7 @@ def _writable_index_dir(root: str) -> CheckResult:
         return CheckResult("index_dir", False, f"index dir not writable ({rg_dir}): {exc}")
 
 
-def collect_doctor_results(repo_path: Optional[str] = None, verbose: bool = False) -> list[CheckResult]:
+def collect_doctor_results(repo_path: str | None = None, verbose: bool = False) -> list[CheckResult]:
     results: list[CheckResult] = []
     results.append(
         CheckResult(
@@ -219,7 +218,7 @@ def collect_doctor_results(repo_path: Optional[str] = None, verbose: bool = Fals
     return results
 
 
-def run_doctor(repo_path: Optional[str] = None, verbose: bool = False) -> None:
+def run_doctor(repo_path: str | None = None, verbose: bool = False) -> None:
     """Verify Python, imports, parser packages, and optional graph open."""
     console.print("[bold]RepoGraph doctor[/]\n")
     results = collect_doctor_results(repo_path=repo_path, verbose=verbose)

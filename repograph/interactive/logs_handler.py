@@ -11,7 +11,6 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -137,7 +136,7 @@ def _print_records(records: list[dict], *, max_rows: int = 200) -> None:
 
 @logs_app.command("list")
 def logs_list(
-    path: Optional[str] = typer.Option(None, "--path", "-p", help="Repo path"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Repo path"),
 ) -> None:
     """List recent run sessions with run_id, timestamp, and record counts."""
     log_dir = _log_dir(path)
@@ -183,8 +182,8 @@ def logs_list(
 
 @logs_app.command("show")
 def logs_show(
-    run: Optional[str] = typer.Option(None, "--run", help="Run ID (default: latest)"),
-    path: Optional[str] = typer.Option(None, "--path", "-p", help="Repo path"),
+    run: str | None = typer.Option(None, "--run", help="Run ID (default: latest)"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Repo path"),
     limit: int = typer.Option(100, "--limit", "-n", help="Max records to show"),
 ) -> None:
     """Show all log records for a run (most recent by default)."""
@@ -201,8 +200,8 @@ def logs_show(
 
 @logs_app.command("errors")
 def logs_errors(
-    run: Optional[str] = typer.Option(None, "--run", help="Run ID (default: latest)"),
-    path: Optional[str] = typer.Option(None, "--path", "-p", help="Repo path"),
+    run: str | None = typer.Option(None, "--run", help="Run ID (default: latest)"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Repo path"),
 ) -> None:
     """Show ERROR and CRITICAL records for a run."""
     log_dir = _log_dir(path)
@@ -222,8 +221,8 @@ def logs_errors(
 @logs_app.command("subsystem")
 def logs_subsystem(
     name: str = typer.Argument(..., help="Subsystem name (pipeline, parsers, graph_store, …)"),
-    run: Optional[str] = typer.Option(None, "--run", help="Run ID (default: latest)"),
-    path: Optional[str] = typer.Option(None, "--path", "-p", help="Repo path"),
+    run: str | None = typer.Option(None, "--run", help="Run ID (default: latest)"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Repo path"),
     limit: int = typer.Option(200, "--limit", "-n", help="Max records to show"),
 ) -> None:
     """Show log records for a specific subsystem."""
@@ -247,12 +246,12 @@ def logs_subsystem(
 
 @logs_app.command("filter")
 def logs_filter(
-    level: Optional[str] = typer.Option(None, "--level", help="Minimum log level (DEBUG/INFO/WARNING/ERROR)"),
-    phase: Optional[str] = typer.Option(None, "--phase", help="Filter by phase name"),
-    subsystem: Optional[str] = typer.Option(None, "--subsystem", help="Filter by subsystem"),
+    level: str | None = typer.Option(None, "--level", help="Minimum log level (DEBUG/INFO/WARNING/ERROR)"),
+    phase: str | None = typer.Option(None, "--phase", help="Filter by phase name"),
+    subsystem: str | None = typer.Option(None, "--subsystem", help="Filter by subsystem"),
     degraded: bool = typer.Option(False, "--degraded", help="Show only degraded records"),
-    run: Optional[str] = typer.Option(None, "--run", help="Run ID (default: latest)"),
-    path: Optional[str] = typer.Option(None, "--path", "-p", help="Repo path"),
+    run: str | None = typer.Option(None, "--run", help="Run ID (default: latest)"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Repo path"),
     limit: int = typer.Option(200, "--limit", "-n", help="Max records to show"),
 ) -> None:
     """Filter log records by level, phase, subsystem, or degraded flag."""
@@ -285,8 +284,8 @@ def logs_filter(
 
 @logs_app.command("tail")
 def logs_tail(
-    subsystem: Optional[str] = typer.Option(None, "--subsystem", "-s", help="Subsystem to tail"),
-    path: Optional[str] = typer.Option(None, "--path", "-p", help="Repo path"),
+    subsystem: str | None = typer.Option(None, "--subsystem", "-s", help="Subsystem to tail"),
+    path: str | None = typer.Option(None, "--path", "-p", help="Repo path"),
     interval: float = typer.Option(0.5, "--interval", help="Poll interval in seconds"),
 ) -> None:
     """Tail the latest log file in real time (polls on file changes)."""

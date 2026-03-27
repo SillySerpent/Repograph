@@ -42,15 +42,16 @@ def expand_reparse_paths_for_incremental(
     out: set[str] = set(base)
     callee_gone = changed | removed
 
-    for fp in callee_gone:
+    # D1: single bulk query instead of N per-file queries
+    if callee_gone:
         try:
             rows = store.query(
                 """
                 MATCH (a:Function)-[:CALLS]->(b:Function)
-                WHERE b.file_path = $fp
+                WHERE b.file_path IN $fps
                 RETURN DISTINCT a.file_path
                 """,
-                {"fp": fp},
+                {"fps": list(callee_gone)},
             )
             for r in rows:
                 p = r[0]
@@ -59,24 +60,23 @@ def expand_reparse_paths_for_incremental(
         except Exception as exc:
             log_degraded(
                 _logger,
-                "reverse-CALLS expansion failed — affected callers may be incomplete",
+                "reverse-CALLS bulk expansion failed — affected callers may be incomplete",
                 exc=exc,
-                partial_result="callers for this file skipped",
-                file_path=fp,
+                partial_result="all reverse-CALLS callers skipped",
             )
 
-    for fp in added | changed | removed:
+    import_targets = added | changed | removed
+    if import_targets:
         try:
-            for im in store.get_importers(fp):
+            for im in store.get_bulk_importers(list(import_targets)):
                 if im in current_paths:
                     out.add(im)
         except Exception as exc:
             log_degraded(
                 _logger,
-                "reverse-IMPORTS expansion failed — affected importers may be incomplete",
+                "reverse-IMPORTS bulk expansion failed — affected importers may be incomplete",
                 exc=exc,
-                partial_result="importers for this file skipped",
-                file_path=fp,
+                partial_result="all importers skipped",
             )
 
     return {p for p in out if p in current_paths}

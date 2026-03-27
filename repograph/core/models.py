@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
 
 
 # ---------------------------------------------------------------------------
@@ -111,18 +110,18 @@ class FunctionNode:
     line_start: int
     line_end: int
     signature: str
-    docstring: Optional[str]
+    docstring: str | None
     is_method: bool
     is_async: bool
     is_exported: bool
     decorators: list[str]
     param_names: list[str]
-    return_type: Optional[str]
+    return_type: str | None
     source_hash: str
     is_dead: bool = False
     is_entry_point: bool = False
     entry_score: float = 0.0
-    community_id: Optional[str] = None
+    community_id: str | None = None
     # Set by Python parser: function is the return value of its enclosing function
     is_closure_returned: bool = False
     # Set by JS parser: module-scope function in a non-ESM file (script-tag context)
@@ -204,11 +203,11 @@ class ClassNode:
     file_path: str
     line_start: int
     line_end: int
-    docstring: Optional[str]
+    docstring: str | None
     base_names: list[str]      # raw base class name strings from source
     is_exported: bool
     source_hash: str
-    community_id: Optional[str] = None
+    community_id: str | None = None
 
 
 @dataclass
@@ -218,10 +217,10 @@ class VariableNode:
     function_id: str    # scope: which function this lives in
     file_path: str
     line_number: int
-    inferred_type: Optional[str]
+    inferred_type: str | None
     is_parameter: bool
     is_return: bool
-    value_repr: Optional[str]   # compact repr of assigned value if literal
+    value_repr: str | None   # compact repr of assigned value if literal
 
 
 @dataclass
@@ -230,7 +229,7 @@ class ImportNode:
     file_path: str
     raw_statement: str
     module_path: str            # as written in source
-    resolved_path: Optional[str]  # resolved file path in repo
+    resolved_path: str | None  # resolved file path in repo
     imported_names: list[str]
     is_wildcard: bool
     line_number: int
@@ -387,13 +386,13 @@ class ArtifactMeta:
     source_hashes: dict[str, str]  # {file_path: hash} — inputs this was derived from
     generated_at: datetime
     is_stale: bool = False
-    stale_reason: Optional[str] = None
+    stale_reason: str | None = None
 
 
 @dataclass
 class StaleResult:
     is_stale: bool
-    stale_reason: Optional[str] = None
+    stale_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------
