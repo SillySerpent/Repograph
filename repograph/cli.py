@@ -1840,73 +1840,26 @@ def watch(
     no_git: bool = typer.Option(False, "--no-git"),
     strict: bool = typer.Option(False, "--strict", help="Same as sync --strict for incremental rebuilds."),
 ):
-    """Watch mode: re-sync on file changes."""
-    from repograph.config import get_repo_root, repograph_dir, db_path
-    from repograph.pipeline.runner import RunConfig, run_incremental_pipeline
+    """Watch mode: re-sync on file changes (debounced 200 ms)."""
+    from repograph.config import repograph_dir
+    from repograph.pipeline.runner import RunConfig
+    from repograph.interactive.watch import FileWatcherDaemon
 
     root = os.path.abspath(path or os.getcwd())
-
-    try:
-        from watchdog.observers import Observer
-        from watchdog.events import FileSystemEventHandler, FileModifiedEvent
-    except ImportError:
-        console.print("[red]watchdog not installed.[/]")
-        raise typer.Exit(1)
 
     rg_dir = repograph_dir(root)
     config = RunConfig(
         repo_root=root, repograph_dir=rg_dir, include_git=not no_git, strict=strict,
     )
 
-    class Handler(FileSystemEventHandler):
-        def _path_str(self, src_path: bytes | str) -> str:
-            return os.fsdecode(src_path) if isinstance(src_path, bytes) else src_path
-
-        def _should_handle(self, event_path: bytes | str) -> bool:
-            p = self._path_str(event_path)
-            if ".repograph" in p:
-                return False
-            from repograph.utils.fs import EXTENSION_TO_LANGUAGE
-            import pathlib
-            ext = pathlib.Path(p).suffix.lower()
-            return ext in EXTENSION_TO_LANGUAGE
-
-        def _on_file_changed(self, src_path: bytes | str) -> None:
-            if self._should_handle(src_path):
-                p = self._path_str(src_path)
-                console.print(f"[cyan]Changed:[/] {p}")
-                try:
-                    run_incremental_pipeline(config)
-                except Exception as e:
-                    console.print(f"[red]Sync error: {e}[/]")
-
-        def on_modified(self, event):
-            if not event.is_directory:
-                self._on_file_changed(event.src_path)
-
-        def on_created(self, event):
-            if not event.is_directory:
-                self._on_file_changed(event.src_path)
-
-        def on_deleted(self, event):
-            if not event.is_directory and self._should_handle(event.src_path):
-                console.print(f"[red]Deleted:[/] {event.src_path}")
-                try:
-                    run_incremental_pipeline(config)
-                except Exception as e:
-                    console.print(f"[red]Sync error: {e}[/]")
-
-    observer = Observer()
-    observer.schedule(Handler(), root, recursive=True)
-    observer.start()
-    console.print(f"[green]Watching[/] {root} for changes. Press Ctrl+C to stop.")
     try:
-        import time
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+        daemon = FileWatcherDaemon(config, repo_root=root)
+    except ImportError:
+        console.print("[red]watchdog not installed. Run: pip install watchdog[/]")
+        raise typer.Exit(1)
+
+    console.print(f"[green]Watching[/] {root} for changes (200 ms debounce). Press Ctrl+C to stop.")
+    daemon.run_until_interrupted()
 
 
 # ---------------------------------------------------------------------------
