@@ -35,7 +35,8 @@ class GraphStoreRelWrites(GraphStoreBase):
         if not pairs:
             return
         uniq = list(dict.fromkeys(pairs))
-        chunk = 48
+        from repograph.config import PREFETCH_CHUNK_SIZE
+        chunk = PREFETCH_CHUNK_SIZE
         for i in range(0, len(uniq), chunk):
             part = uniq[i : i + chunk]
             conds = " OR ".join(
@@ -126,7 +127,6 @@ class GraphStoreRelWrites(GraphStoreBase):
                 existing_conf = existing[0][0] or 0.0
                 if existing_conf >= conf:
                     # Existing edge is already at least as good — only update line
-                    ex_reason = self._esc(existing[0][1] or edge.reason)
                     self._exec_rel(
                         f"MATCH (a:Function {{id:'{fid}'}})-[r:CALLS]->(b:Function {{id:'{tid}'}}) "
                         f"SET r.call_site_line={line}"

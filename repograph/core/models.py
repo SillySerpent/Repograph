@@ -6,7 +6,7 @@ expression text plus caller context), and edge records used by the pipeline and 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -87,7 +87,7 @@ class FileNode:
     source_hash: str
     is_test: bool
     is_config: bool
-    indexed_at: datetime = field(default_factory=datetime.utcnow)
+    indexed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -349,7 +349,7 @@ class PathwayDoc:
     confidence: float
     source: str   # "auto_detected" | "curated" | "hybrid"
     context_doc: str    # preformatted text ready for AI injection
-    generated_at: datetime = field(default_factory=datetime.utcnow)
+    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     # importance_score measures relevance (step depth × file spread × entry weight).
     # Intentionally separate from confidence (which measures analysis reliability).
     importance_score: float = 0.0

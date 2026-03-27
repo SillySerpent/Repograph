@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
+from repograph.config import AGENT_GUIDE_MAX_FILE_READ_BYTES as _MAX_FILE_READ_BYTES
 from repograph.graph_store.store import GraphStore
 from repograph.utils import logging as rg_log
 
@@ -41,7 +42,7 @@ def _extract_repo_summary(repo_root: str) -> str:
             continue
         try:
             with open(fpath, encoding="utf-8", errors="replace") as f:
-                raw = f.read(3000)
+                raw = f.read(_MAX_FILE_READ_BYTES)
             # Split on blank lines and iterate blocks
             blocks = raw.split("\n\n")
             for i, block in enumerate(blocks):

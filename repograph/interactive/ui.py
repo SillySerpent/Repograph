@@ -21,7 +21,6 @@ _YELLOW = "\033[93m"
 _RED = "\033[91m"
 _RESET = "\033[0m"
 _BLUE = "\033[94m"
-_MAGENTA = "\033[95m"
 
 
 def _b(s: str) -> str:
@@ -46,11 +45,6 @@ def _r(s: str) -> str:
 
 def _d(s: str) -> str:
     return f"{_DIM}{s}{_RESET}"
-
-
-def _m(s: str) -> str:
-    """Magenta colour — available for future handler screens."""
-    return f"{_MAGENTA}{s}{_RESET}"
 
 
 def _hr(char: str = "─", width: int = 60) -> None:

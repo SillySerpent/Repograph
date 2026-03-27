@@ -42,6 +42,7 @@ Output schema (``modules.json``)
 import os
 from collections import defaultdict
 
+from repograph.config import DEFAULT_MODULE_EXPANSION_THRESHOLD as _DEFAULT_MODULE_EXPANSION_THRESHOLD
 from repograph.graph_store.store import GraphStore
 from repograph.core.plugin_framework import ExporterPlugin, PluginManifest as _Manifest
 from repograph.plugins.utils import write_meta_json
@@ -61,7 +62,7 @@ _MIN_FUNCTIONS_FOR_KEY = 2
 def run(
     store: GraphStore,
     repograph_dir: str,
-    module_expansion_threshold: int = 15,
+    module_expansion_threshold: int = _DEFAULT_MODULE_EXPANSION_THRESHOLD,
 ) -> list[dict]:
     """Build a per-directory module index and persist it to meta/modules.json.
 

@@ -2,7 +2,6 @@ from repograph.core.plugin_framework.contracts import (
     AnalyzerPlugin,          # legacy alias for DemandAnalyzerPlugin
     DemandAnalyzerPlugin,
     DynamicAnalyzerPlugin,
-    ensure_capabilities,
     EvidenceProducerPlugin,
     ExporterPlugin,
     FrameworkAdapterPlugin,
@@ -21,7 +20,6 @@ __all__ = [
     "AnalyzerPlugin",
     "DemandAnalyzerPlugin",
     "DynamicAnalyzerPlugin",
-    "ensure_capabilities",
     "EvidenceProducerPlugin",
     "ExporterPlugin",
     "FrameworkAdapterPlugin",

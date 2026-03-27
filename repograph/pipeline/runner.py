@@ -45,6 +45,11 @@ from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
+from repograph.config import (
+    DEFAULT_CONTEXT_TOKENS as _DEFAULT_CONTEXT_TOKENS,
+    DEFAULT_MIN_COMMUNITY_SIZE as _DEFAULT_MIN_COMMUNITY_SIZE,
+    DEFAULT_MODULE_EXPANSION_THRESHOLD as _DEFAULT_MODULE_EXPANSION_THRESHOLD,
+)
 from repograph.core.models import FileRecord, ParsedFile
 from repograph.graph_store.store import GraphStore
 from repograph.observability import (
@@ -86,12 +91,12 @@ class RunConfig:
     include_git: bool = True
     include_embeddings: bool = False
     full: bool = False
-    max_context_tokens: int = 2000
+    max_context_tokens: int = _DEFAULT_CONTEXT_TOKENS
     duplicates_same_language_only: bool = True
     strict: bool = False
     continue_on_error: bool = True
-    min_community_size: int = 3
-    module_expansion_threshold: int = 15
+    min_community_size: int = _DEFAULT_MIN_COMMUNITY_SIZE
+    module_expansion_threshold: int = _DEFAULT_MODULE_EXPANSION_THRESHOLD
     include_tests_config_registry: bool = False
     experimental_phase_plugins: bool = False
 

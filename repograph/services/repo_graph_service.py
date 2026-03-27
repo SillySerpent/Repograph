@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from repograph.config import DEFAULT_CONTEXT_TOKENS as _DEFAULT_CONTEXT_TOKENS
 from repograph.graph_store.store_queries_analytics import (
     ANY_CALL_TEST_COVERAGE_DEFINITION,
     ENTRY_POINT_TEST_COVERAGE_DEFINITION,
@@ -107,7 +108,7 @@ class RepoGraphService(ObservableMixin):
         self,
         full: bool = False,
         include_embeddings: bool = False,
-        max_context_tokens: int = 2000,
+        max_context_tokens: int = _DEFAULT_CONTEXT_TOKENS,
         strict: bool = False,
         continue_on_error: bool = True,
     ) -> dict:

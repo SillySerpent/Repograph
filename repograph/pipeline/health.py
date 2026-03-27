@@ -6,6 +6,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
+from repograph.config import ERROR_TRUNCATION_CHARS as _ERROR_TRUNCATION_CHARS
 from repograph.graph_store.store import GraphStore
 from repograph.trust.contract import CONTRACT_VERSION
 
@@ -87,7 +88,7 @@ def build_health_failure_report(
         "stats": dict(partial_stats) if partial_stats else {},
         "status": "failed",
         "error_phase": error_phase,
-        "error_message": (error_message or "")[:4000],
+        "error_message": (error_message or "")[:_ERROR_TRUNCATION_CHARS],
         "strict": strict,
         "call_edges_total": None,
         "call_edges_by_reason": None,

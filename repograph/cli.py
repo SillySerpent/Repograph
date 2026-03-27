@@ -49,8 +49,25 @@ app.add_typer(logs_app, name="logs")
 console = Console()
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        import importlib.metadata
+        try:
+            version = importlib.metadata.version("repograph")
+        except importlib.metadata.PackageNotFoundError:
+            version = "unknown"
+        typer.echo(f"repograph {version}")
+        raise typer.Exit()
+
+
 @app.callback()
-def _cli_startup(ctx: typer.Context) -> None:
+def _cli_startup(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False, "--version", "-V", callback=_version_callback, is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
     """Set a stable command_id on the observability context for every CLI invocation."""
     command_id = new_run_id()
     set_obs_context(command_id=command_id)

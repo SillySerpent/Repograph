@@ -318,14 +318,3 @@ class TracerPlugin(RepoGraphPlugin, ABC):
         return self.manifest.trace_format
 
 
-# ---------------------------------------------------------------------------
-# Utility
-# ---------------------------------------------------------------------------
-
-def ensure_capabilities(requirements: Iterable[str] | None) -> tuple[str, ...]:
-    """Deduplicate a requirements/produces iterable, preserving order.
-
-    >>> ensure_capabilities(["symbols", "symbols", "imports"])
-    ('symbols', 'imports')
-    """
-    return tuple(dict.fromkeys(requirements or ()))

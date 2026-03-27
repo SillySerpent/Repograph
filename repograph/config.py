@@ -25,6 +25,11 @@ DB_FILENAME = "graph.db"
 DEFAULT_CONTEXT_TOKENS = 2000
 DEFAULT_GIT_DAYS = 180
 DEFAULT_ENTRY_POINT_LIMIT = 20
+DEFAULT_MIN_COMMUNITY_SIZE = 3
+DEFAULT_MODULE_EXPANSION_THRESHOLD = 15
+ERROR_TRUNCATION_CHARS = 4000
+AGENT_GUIDE_MAX_FILE_READ_BYTES = 3000
+PREFETCH_CHUNK_SIZE = 48
 
 LANGUAGE_EXTENSIONS: dict[str, str] = {
     ".py": "python",
@@ -90,7 +95,7 @@ def _read_index_yaml(path: str) -> dict | None:
         import yaml
 
         with open(path, encoding="utf-8", errors="replace") as f:
-            return yaml.safe_load(f) or {}
+            data = yaml.safe_load(f) or {}
     except Exception as exc:
         _logger.warning(
             "could not load index YAML — config file will be ignored",
@@ -99,6 +104,12 @@ def _read_index_yaml(path: str) -> dict | None:
             exc_msg=str(exc),
         )
         return None
+
+    if isinstance(data, dict):
+        from repograph.config_schema import validate_index_yaml
+        validate_index_yaml(data, path, _logger)
+
+    return data
 
 
 def _exclude_dirs_from_mapping(data: dict) -> set[str]:
