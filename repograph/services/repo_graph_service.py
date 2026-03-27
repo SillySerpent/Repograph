@@ -1291,6 +1291,113 @@ class RepoGraphService(ObservableMixin):
             self._store.close()
             self._store = None
 
+    # ------------------------------------------------------------------
+    # Observability log access
+    # ------------------------------------------------------------------
+
+    def _log_dir(self) -> "Path":
+        from pathlib import Path
+        return Path(self.repograph_dir) / "logs"
+
+    def list_log_sessions(self) -> list[dict]:
+        """List available log sessions with run_id, timestamp, and record counts.
+
+        Returns a list of dicts sorted most-recent-first, each with:
+        ``run_id``, ``timestamp_iso``, ``record_count``, ``error_count``.
+        """
+        import json, time as _time
+        log_dir = self._log_dir()
+        if not log_dir.exists():
+            return []
+        sessions = []
+        for run_dir in sorted(log_dir.iterdir(), key=lambda d: d.stat().st_mtime, reverse=True):
+            if not run_dir.is_dir():
+                continue
+            all_j = run_dir / "all.jsonl"
+            err_j = run_dir / "errors.jsonl"
+            n_all = sum(1 for _ in all_j.open() if _.strip()) if all_j.exists() else 0
+            n_err = sum(1 for _ in err_j.open() if _.strip()) if err_j.exists() else 0
+            sessions.append({
+                "run_id": run_dir.name,
+                "timestamp_iso": _time.strftime(
+                    "%Y-%m-%dT%H:%M:%S", _time.localtime(run_dir.stat().st_mtime)
+                ),
+                "record_count": n_all,
+                "error_count": n_err,
+            })
+        return sessions
+
+    def get_log_session(
+        self,
+        run_id: str | None = None,
+        subsystem: str | None = None,
+        limit: int = 500,
+    ) -> list[dict]:
+        """Return parsed log records for a session, optionally filtered by subsystem.
+
+        Args:
+            run_id:    Run ID to fetch (default: most recent).
+            subsystem: If set, read the ``<subsystem>.jsonl`` file instead of ``all.jsonl``.
+            limit:     Maximum number of records to return (most recent).
+        """
+        import json
+        log_dir = self._log_dir()
+        run_dir = self._resolve_run_dir(log_dir, run_id)
+        if run_dir is None:
+            return []
+        filename = f"{subsystem}.jsonl" if subsystem else "all.jsonl"
+        log_file = run_dir / filename
+        if not log_file.exists():
+            return []
+        lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        records = []
+        for line in lines:
+            line = line.strip()
+            if line:
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+        return records[-limit:]
+
+    def get_recent_errors(self, run_id: str | None = None, limit: int = 50) -> list[dict]:
+        """Return the most recent ERROR and CRITICAL records."""
+        import json
+        log_dir = self._log_dir()
+        run_dir = self._resolve_run_dir(log_dir, run_id)
+        if run_dir is None:
+            return []
+        err_file = run_dir / "errors.jsonl"
+        if not err_file.exists():
+            return []
+        lines = err_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        records = []
+        for line in lines:
+            line = line.strip()
+            if line:
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+        return records[-limit:]
+
+    def _resolve_run_dir(self, log_dir: "Path", run_id: str | None) -> "Path | None":
+        from pathlib import Path
+        if not log_dir.exists():
+            return None
+        if run_id:
+            candidate = log_dir / run_id
+            return candidate if candidate.is_dir() else None
+        latest = log_dir / "latest"
+        if latest.is_symlink() and latest.exists():
+            return latest.resolve()
+        dirs = sorted(
+            (d for d in log_dir.iterdir() if d.is_dir()),
+            key=lambda d: d.stat().st_mtime,
+            reverse=True,
+        )
+        return dirs[0] if dirs else None
+
     # Context manager support
     def __enter__(self) -> "RepoGraphService":
         return self

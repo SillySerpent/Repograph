@@ -118,6 +118,27 @@ def create_server(service: RepoGraphService, *, port: int | None = None):
     def communities_resource() -> str:
         return json.dumps(service.communities(), indent=2)
 
+    # ── Observability log access tools ─────────────────────────────────────
+
+    @mcp.tool()
+    def list_log_sessions() -> list[dict]:
+        """List available observability log sessions (run_ids, timestamps, record counts)."""
+        return service.list_log_sessions()
+
+    @mcp.tool()
+    def get_errors(run_id: str = "") -> list[dict]:
+        """Return recent ERROR and CRITICAL log records for the given run (empty = latest)."""
+        _logger.info("mcp tool: get_errors", run_id=run_id or "latest")
+        return service.get_recent_errors(run_id=run_id or None)
+
+    @mcp.tool()
+    def get_log_subsystem(subsystem: str, run_id: str = "") -> list[dict]:
+        """Return log records for one subsystem (pipeline, parsers, graph_store, …)."""
+        _logger.info("mcp tool: get_log_subsystem", subsystem=subsystem, run_id=run_id or "latest")
+        return service.get_log_session(run_id=run_id or None, subsystem=subsystem)
+
+    # ── Schema / registry resources ─────────────────────────────────────────
+
     @mcp.resource("repograph://schema")
     def schema_resource() -> str:
         return json.dumps(

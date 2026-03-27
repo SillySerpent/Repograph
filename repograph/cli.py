@@ -43,6 +43,9 @@ trace_app = typer.Typer(
 )
 app.add_typer(trace_app, name="trace")
 
+from repograph.interactive.logs_handler import logs_app  # noqa: E402
+app.add_typer(logs_app, name="logs")
+
 console = Console()
 
 
