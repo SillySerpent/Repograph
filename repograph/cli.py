@@ -1705,6 +1705,56 @@ def impact(
 
 
 # ---------------------------------------------------------------------------
+# repograph impact-graph  (I3)
+# ---------------------------------------------------------------------------
+
+
+@app.command("impact-graph")
+def impact_graph(
+    entry: str = typer.Argument(..., help="Entry point: qualified name or function ID"),
+    fmt: str = typer.Option("mermaid", "--format", "-f", help="Output format: mermaid | dot"),
+    depth: int = typer.Option(4, "--depth", "-d", help="Maximum call-graph depth"),
+    min_conf: float = typer.Option(0.5, "--min-conf", help="Minimum edge confidence (0–1)"),
+    out: str | None = typer.Option(None, "--out", "-o", help="Write diagram to file instead of stdout"),
+    path: str | None = typer.Option(None, "--path"),
+):
+    """Render a confidence-weighted call graph centred on an entry point.
+
+    \\b
+    Examples:
+      repograph impact-graph my_module.my_func
+      repograph impact-graph my_func --format dot --depth 3 --out graph.dot
+      repograph impact-graph my_func --format mermaid | pbcopy
+    """
+    _root, store = _get_root_and_store(path)
+
+    from repograph.plugins.exporters.impact_graph.plugin import render_impact_graph
+
+    diagram, n_nodes, n_edges = render_impact_graph(
+        store,
+        entry_point=entry,
+        fmt=fmt,
+        max_depth=depth,
+        min_confidence=min_conf,
+    )
+
+    if not diagram:
+        console.print(f"[red]Entry point '{entry}' not found or no callees.[/]")
+        raise typer.Exit(1)
+
+    if out:
+        import pathlib
+        pathlib.Path(out).write_text(diagram, encoding="utf-8")
+        console.print(f"[green]Wrote {fmt} diagram ({n_nodes} nodes, {n_edges} edges) to {out}[/]")
+    else:
+        console.print(diagram)
+        console.print(
+            f"\n[dim]({n_nodes} nodes, {n_edges} edges, format={fmt})[/]",
+            highlight=False,
+        )
+
+
+# ---------------------------------------------------------------------------
 # repograph diff-impact  (I1)
 # ---------------------------------------------------------------------------
 
