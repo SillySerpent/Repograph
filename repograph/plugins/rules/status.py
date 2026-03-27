@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from hashlib import sha1
 from pathlib import Path
 from typing import Any, Iterable
@@ -72,7 +72,7 @@ def update_finding_status(service: Any | None, finding_id: str, status: str, not
     statuses[finding_id] = {
         'status': norm,
         'note': (note or '').strip(),
-        'updated_at': datetime.now(UTC).isoformat(),
+        'updated_at': datetime.now(timezone.utc).isoformat(),
     }
     save_finding_status_store(service, statuses)
     return statuses[finding_id]

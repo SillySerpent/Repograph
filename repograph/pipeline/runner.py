@@ -95,6 +95,21 @@ class RunConfig:
     include_tests_config_registry: bool = False
     experimental_phase_plugins: bool = False
 
+    def __post_init__(self) -> None:
+        errors: list[str] = []
+        if self.min_community_size < 0:
+            errors.append(f"min_community_size must be >= 0, got {self.min_community_size}")
+        if self.module_expansion_threshold < 1:
+            errors.append(
+                f"module_expansion_threshold must be >= 1, got {self.module_expansion_threshold}"
+            )
+        if self.max_context_tokens < 100:
+            errors.append(f"max_context_tokens must be >= 100, got {self.max_context_tokens}")
+        if not Path(self.repo_root).is_dir():
+            errors.append(f"repo_root does not exist or is not a directory: {self.repo_root!r}")
+        if errors:
+            raise ValueError("Invalid RunConfig:\n" + "\n".join(f"  - {e}" for e in errors))
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
