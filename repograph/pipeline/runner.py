@@ -272,7 +272,7 @@ def run_full_pipeline(config: RunConfig) -> dict:
         p05_calls, p05b_callbacks, p06_heritage, p07_variables, p08_types,
         p09_communities, p10_processes, p12_coupling,
     )
-    from repograph.pipeline.phases import p03b_framework_tags, p05c_http_calls
+    from repograph.pipeline.phases import p03b_framework_tags, p05c_http_calls, p06b_layer_classify
     from repograph.docs.staleness import StalenessTracker
     from repograph.pipeline.incremental import IncrementalDiff
     from repograph.pipeline.sync_state import clear_sync_lock, write_sync_lock
@@ -339,6 +339,9 @@ def run_full_pipeline(config: RunConfig) -> dict:
 
             progress.add_task("Phase 6: Resolving inheritance...", total=None)
             p06_heritage.run(parsed, store, symbol_table)
+
+            progress.add_task("Phase 6b: Classifying architecture layers...", total=None)
+            p06b_layer_classify.run(parsed, store)
 
             progress.add_task("Phase 7: Tracking variables...", total=None)
             p07_variables.run(parsed, store)
@@ -441,7 +444,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
         p05_calls, p05b_callbacks, p06_heritage, p07_variables, p08_types,
         p09_communities, p10_processes,
     )
-    from repograph.pipeline.phases import p03b_framework_tags, p05c_http_calls
+    from repograph.pipeline.phases import p03b_framework_tags, p05c_http_calls, p06b_layer_classify
     from repograph.pipeline.sync_state import clear_sync_lock, write_sync_lock
     from repograph.pipeline.health import (
         build_health_failure_report, build_health_report, write_health_json,
@@ -562,6 +565,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
             p05b_callbacks.run(parsed, store, symbol_table)
             p05c_http_calls.run(parsed, store)
             p06_heritage.run(parsed, store, symbol_table)
+            p06b_layer_classify.run(parsed, store)
             p07_variables.run(parsed, store, reparse_paths=reparse_paths)
             p08_types.run(parsed, store, symbol_table)
 

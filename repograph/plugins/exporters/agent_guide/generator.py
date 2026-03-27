@@ -210,17 +210,27 @@ def generate_agent_guide(store: GraphStore, repo_root: str, repograph_dir: str) 
 
     # Production pathways table (sorted by importance_score)
     if sorted_prod:
+        # Build entry-function → layer map for layer column
+        entry_fn_ids = [
+            p.get("entry_function", "") for p in sorted_prod if p.get("entry_function")
+        ]
+        pathway_fn_layers = _build_fn_layer_map(store, entry_fn_ids)
+
         lines += [
             "## Available Pathways in This Repo",
             "",
-            "| Name | Entry Point | Steps | Importance | Confidence | Source |",
-            "|------|-------------|-------|-----------|-----------|--------|",
+            "| Name | Entry Point | Layer | Steps | Importance | Confidence | Source |",
+            "|------|-------------|-------|-------|-----------|-----------|--------|",
         ]
         for p in sorted_prod:
             conf = p.get("confidence") or 0.0
             imp = p.get("importance_score") or 0.0
+            entry_fn = p.get("entry_function", "")
+            raw_layer = pathway_fn_layers.get(entry_fn, "") or ""
+            layer_col = raw_layer if raw_layer and raw_layer != "unknown" else "—"
             lines.append(
-                f"| {p['name']} | {p.get('entry_function', '').split(':')[-1]} "
+                f"| {p['name']} | {entry_fn.split(':')[-1]} "
+                f"| {layer_col} "
                 f"| {p.get('step_count', 0)} | {imp:.2f} | {conf:.2f}"
                 f" | {p.get('source', 'auto')} |"
             )
@@ -236,21 +246,30 @@ def generate_agent_guide(store: GraphStore, repo_root: str, repograph_dir: str) 
             "",
         ]
 
-    # Top entry points
+    # Top entry points — include Layer column when layer data is available
     if entry_points:
+        ep_layers = _build_fn_layer_map(store, [ep["id"] for ep in entry_points])
         lines += [
             "## Top Entry Points",
             "",
-            "| Function | File | Score |",
-            "|----------|------|-------|",
+            "| Function | File | Score | Layer |",
+            "|----------|------|-------|-------|",
         ]
         for ep in entry_points[:10]:
+            layer = ep_layers.get(ep["id"], "")
+            layer_col = f" {layer} |" if layer and layer != "unknown" else " — |"
             lines.append(
                 f"| {ep.get('qualified_name', '').split(':')[-1]} "
                 f"| {ep.get('file_path', '')} "
                 f"| {ep.get('entry_score', 0):.2f} |"
+                f"{layer_col}"
             )
         lines.append("")
+
+    # Architecture layers summary
+    arch_lines = _build_architecture_layers_section(store)
+    if arch_lines:
+        lines += arch_lines
 
     # Documentation index
     if doc_index:
@@ -335,3 +354,72 @@ def generate_agent_guide(store: GraphStore, repo_root: str, repograph_dir: str) 
         f.write(guide)
 
     return guide
+
+
+# ---------------------------------------------------------------------------
+# Layer-aware helpers (Block G3)
+# ---------------------------------------------------------------------------
+
+
+def _build_fn_layer_map(store: GraphStore, fn_ids: list[str]) -> dict[str, str]:
+    """Return {fn_id: layer} for the given function ids using a single query."""
+    if not fn_ids:
+        return {}
+    try:
+        rows = store.query(
+            "MATCH (f:Function) WHERE f.id IN $ids RETURN f.id, f.layer",
+            {"ids": fn_ids},
+        )
+        return {r[0]: (r[1] or "") for r in rows if r[0]}
+    except Exception as exc:
+        rg_log.warn_once(f"agent_guide: _build_fn_layer_map failed: {exc}")
+        return {}
+
+
+def _build_architecture_layers_section(store: GraphStore) -> list[str]:
+    """Build the 'Architecture Layers' section for the agent guide.
+
+    Returns an empty list when no layer data is available (pre-G1 databases).
+    """
+    try:
+        # Aggregate function counts per layer (single query)
+        count_rows = store.query(
+            "MATCH (f:Function) WHERE f.layer <> '' AND f.layer <> 'unknown' "
+            "RETURN f.layer, count(f) ORDER BY count(f) DESC"
+        )
+        if not count_rows:
+            return []
+
+        # Get top entry points per layer (single query, limit 30 total)
+        ep_rows = store.query(
+            "MATCH (f:Function {is_entry_point: true}) "
+            "WHERE f.layer <> '' AND f.layer <> 'unknown' "
+            "RETURN f.layer, f.name "
+            "ORDER BY f.entry_score DESC LIMIT 30"
+        )
+    except Exception as exc:
+        rg_log.warn_once(f"agent_guide: architecture layers query failed: {exc}")
+        return []
+
+    # Group entry point names by layer
+    ep_by_layer: dict[str, list[str]] = {}
+    for row in ep_rows:
+        layer, fn_name = row[0], row[1]
+        if layer and fn_name:
+            ep_by_layer.setdefault(layer, []).append(fn_name)
+
+    lines: list[str] = [
+        "## Architecture Layers",
+        "",
+        "Layer classification is based on import analysis and file-path heuristics.",
+        "",
+        "| Layer | Functions | Key Entry Points |",
+        "|-------|-----------|-----------------|",
+    ]
+    for row in count_rows:
+        layer, count = row[0], row[1]
+        eps = ep_by_layer.get(layer, [])
+        ep_display = ", ".join(eps[:3]) if eps else "—"
+        lines.append(f"| {layer} | {count} | {ep_display} |")
+    lines.append("")
+    return lines
