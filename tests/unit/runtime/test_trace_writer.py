@@ -110,3 +110,21 @@ def test_stats_track_written_records(tmp_path: Path):
         w.write({"b": 2})
         w.write({"c": 3})
     assert w.stats.written_records == 3
+
+
+def test_single_file_mode_replaces_old_trace_files(tmp_path: Path):
+    """single_file mode must prune old JSONL traces before writing."""
+    out_dir = tmp_path / "traces"
+    out_dir.mkdir(parents=True)
+    (out_dir / "old_a.jsonl").write_text('{"kind":"session"}\n', encoding="utf-8")
+    (out_dir / "old_b.jsonl").write_text('{"kind":"session"}\n', encoding="utf-8")
+
+    w = TraceWriter(out_dir, "pytest", _policy(), single_file=True)
+    with w:
+        ok = w.write({"kind": "call", "fn": "x"})
+        assert ok is True
+        assert w.path is not None
+        assert w.path.name == "pytest.jsonl"
+
+    files = sorted(p.name for p in out_dir.glob("*.jsonl"))
+    assert files == ["pytest.jsonl"]

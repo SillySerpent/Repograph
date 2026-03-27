@@ -121,6 +121,7 @@ repograph trace report
 - API/CLI/MCP boundaries: [`docs/SURFACES.md`](docs/SURFACES.md)
 - Pipeline and hooks: [`docs/PIPELINE.md`](docs/PIPELINE.md)
 - Accuracy and known limits: [`docs/ACCURACY.md`](docs/ACCURACY.md)
+- Config ownership and generated artifact policy: [`docs/CONFIG_HYGIENE.md`](docs/CONFIG_HYGIENE.md)
 
 ## License
 

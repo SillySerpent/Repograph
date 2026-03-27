@@ -98,7 +98,12 @@ class SysTracer:
     def start(self) -> None:
         """Begin tracing."""
         out_dir = trace_dir(self.repograph_dir)
-        self._writer = TraceWriter(out_dir, self.session_name, self.trace_policy)
+        self._writer = TraceWriter(
+            out_dir,
+            self.session_name,
+            self.trace_policy,
+            single_file=True,
+        )
         self._writer.open()
         self._path = self._writer.path
 
