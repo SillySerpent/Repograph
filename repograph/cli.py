@@ -1705,6 +1705,96 @@ def impact(
 
 
 # ---------------------------------------------------------------------------
+# repograph diff-impact  (I1)
+# ---------------------------------------------------------------------------
+
+
+@app.command("diff-impact")
+def diff_impact(
+    diff: str | None = typer.Option(
+        None, "--diff", "-d",
+        help="Git ref to diff against (e.g. HEAD~1, main). "
+             "Changed file paths are resolved via `git diff --name-only`.",
+    ),
+    files: list[str] | None = typer.Option(
+        None, "--files", "-f",
+        help="Explicit list of changed file paths (relative to repo root). "
+             "Mutually exclusive with --diff.",
+    ),
+    max_hops: int = typer.Option(5, "--hops", help="Maximum call-graph hops."),
+    path: str | None = typer.Option(None, "--path"),
+):
+    """Rank all functions affected by a set of file changes.
+
+    Uses the call graph (plus MAKES_HTTP_CALL edges for cross-language impact)
+    to compute transitive callers of every function in the changed files, scored
+    by entry_score × hop_decay.
+
+    \\b
+    Examples:
+      repograph diff-impact --diff HEAD~1
+      repograph diff-impact --diff main
+      repograph diff-impact --files app/models/user.py app/auth.py
+    """
+    import subprocess
+
+    root, store = _get_root_and_store(path)
+
+    if diff and files:
+        console.print("[red]--diff and --files are mutually exclusive.[/]")
+        raise typer.Exit(1)
+
+    if diff:
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--name-only", diff],
+                capture_output=True, text=True, check=True, cwd=root,
+            )
+            changed = [p.strip() for p in result.stdout.splitlines() if p.strip()]
+        except subprocess.CalledProcessError as exc:
+            console.print(f"[red]git diff failed: {exc.stderr.strip()}[/]")
+            raise typer.Exit(1)
+    elif files:
+        changed = list(files)
+    else:
+        console.print("[red]Provide --diff <git-ref> or --files <paths>.[/]")
+        raise typer.Exit(1)
+
+    if not changed:
+        console.print("[green]No changed files found.[/]")
+        return
+
+    from repograph.services.impact_analysis import compute_impact, format_impact_table
+
+    console.print(f"[cyan]Analyzing impact of {len(changed)} changed file(s)...[/]")
+    results = compute_impact(store, changed_paths=changed, max_hops=max_hops)
+
+    if not results:
+        console.print("[green]No callers found for the changed files.[/]")
+        return
+
+    table = Table(title=f"Impact analysis ({len(results)} affected functions)")
+    table.add_column("Score", justify="right", style="yellow")
+    table.add_column("Hop", justify="right")
+    table.add_column("HTTP", justify="center")
+    table.add_column("Function", style="cyan")
+    table.add_column("File")
+
+    for r in results[:50]:
+        table.add_row(
+            f"{r.impact_score:.3f}",
+            str(r.hop),
+            "✓" if r.via_http else "",
+            r.qualified_name,
+            r.file_path,
+        )
+    if len(results) > 50:
+        table.add_row("...", "...", "...", f"...and {len(results) - 50} more", "")
+
+    console.print(table)
+
+
+# ---------------------------------------------------------------------------
 # repograph query
 # ---------------------------------------------------------------------------
 

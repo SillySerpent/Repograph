@@ -1382,6 +1382,43 @@ class RepoGraphService(ObservableMixin):
                     pass
         return records[-limit:]
 
+    # ── I1: Change impact analysis ────────────────────────────────────────────
+
+    def compute_diff_impact(
+        self,
+        changed_paths: list[str],
+        max_hops: int = 5,
+    ) -> list[dict]:
+        """Return a ranked list of functions impacted by the given changed files.
+
+        Each entry is a dict with keys: ``fn_id``, ``qualified_name``,
+        ``file_path``, ``hop``, ``impact_score``, ``via_http``, ``edge_path``.
+
+        Parameters
+        ----------
+        changed_paths:
+            Repo-relative file paths that changed.
+        max_hops:
+            Maximum call-graph traversal depth.
+        """
+        from repograph.services.impact_analysis import compute_impact, ImpactedFunction
+
+        results: list[ImpactedFunction] = compute_impact(
+            self._get_store(), changed_paths=changed_paths, max_hops=max_hops,
+        )
+        return [
+            {
+                "fn_id": r.fn_id,
+                "qualified_name": r.qualified_name,
+                "file_path": r.file_path,
+                "hop": r.hop,
+                "impact_score": r.impact_score,
+                "via_http": r.via_http,
+                "edge_path": r.edge_path,
+            }
+            for r in results
+        ]
+
     def _resolve_run_dir(self, log_dir: Path, run_id: str | None) -> Path | None:
         if not log_dir.exists():
             return None
