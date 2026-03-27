@@ -1,4 +1,4 @@
-"""Mirror layer — generate the full .repograph/ directory structure."""
+"""Mirror layer — generate the full .repograph/mirror directory structure."""
 from __future__ import annotations
 
 import json

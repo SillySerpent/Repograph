@@ -136,7 +136,7 @@ def _load_gitignore(repo_root: str) -> pathspec.PathSpec | None:
         return None
     with open(gitignore_path, encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
-    return pathspec.PathSpec.from_lines("gitwildmatch", lines)
+    return pathspec.PathSpec.from_lines("gitignore", lines)
 
 
 def walk_repo(
