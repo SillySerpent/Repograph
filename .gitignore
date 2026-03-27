@@ -19,6 +19,7 @@ venv/
 *.db
 *.sqlite
 *.sqlite3
+MagicMock/
 
 # OS/editor junk
 .DS_Store
@@ -31,3 +32,11 @@ build/
 dist/
 *.egg-info/
 conftest.py
+
+
+.env
+env
+.cluade
+cluade
+.cursor
+cursor

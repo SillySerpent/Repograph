@@ -6,6 +6,7 @@ import threading
 import time
 from typing import Any, cast
 from unittest.mock import MagicMock, patch, call
+from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +67,8 @@ def test_debounce_multiple_events_triggers_one_sync(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     sync_calls: list[float] = []
 
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
@@ -95,7 +97,8 @@ def test_debounce_two_separate_bursts_trigger_two_syncs(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     sync_calls: list[float] = []
 
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
@@ -127,7 +130,8 @@ def test_daemon_start_starts_observer(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
     daemon.start()
 
@@ -143,7 +147,8 @@ def test_daemon_stop_stops_and_joins_observer(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
     daemon.start()
     daemon.stop()
@@ -157,7 +162,8 @@ def test_daemon_stop_cancels_pending_debounce(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     sync_calls: list[int] = []
 
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
@@ -182,7 +188,8 @@ def test_sync_ok_reports_to_stderr(tmp_path, capsys):
 
     from repograph.interactive.watch import FileWatcherDaemon
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
 
     with patch("repograph.pipeline.runner.run_incremental_pipeline") as mock_run:
@@ -200,7 +207,8 @@ def test_sync_error_reports_to_stderr(tmp_path, capsys):
 
     from repograph.interactive.watch import FileWatcherDaemon
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
 
     with patch("repograph.pipeline.runner.run_incremental_pipeline") as mock_run:
@@ -244,7 +252,8 @@ def test_watchdog_missing_raises_import_error(tmp_path):
             del sys.modules["repograph.interactive.watch"]
         from repograph.interactive.watch import FileWatcherDaemon
 
-        config = MagicMock()
+        from repograph.pipeline.runner import RunConfig
+        config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
         daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
 
         try:

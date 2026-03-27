@@ -71,6 +71,18 @@ _logger = get_logger(__name__, subsystem="pipeline")
 console = Console()
 
 
+def _validate_run_config_paths(config: "RunConfig") -> None:
+    """Fail fast if runner is called with invalid path-like config values."""
+    if not isinstance(config.repo_root, str):
+        raise ValueError(f"RunConfig.repo_root must be a str path, got {type(config.repo_root).__name__}")
+    if not isinstance(config.repograph_dir, str):
+        raise ValueError(
+            f"RunConfig.repograph_dir must be a str path, got {type(config.repograph_dir).__name__}"
+        )
+    if not Path(config.repo_root).is_dir():
+        raise ValueError(f"RunConfig.repo_root must be an existing directory: {config.repo_root!r}")
+
+
 def _runtime_dir_has_traces(repograph_dir: str) -> bool:
     """True if ``.repograph/runtime`` exists and has at least one entry."""
     td = Path(repograph_dir) / "runtime"
@@ -369,6 +381,7 @@ def run_full_pipeline(config: RunConfig) -> dict:
     )
 
     _run_id = new_run_id()
+    _validate_run_config_paths(config)
     init_observability(ObservabilityConfig(
         log_dir=Path(config.repograph_dir) / "logs",
         run_id=_run_id,
@@ -523,6 +536,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
     )
 
     _run_id = new_run_id()
+    _validate_run_config_paths(config)
     init_observability(ObservabilityConfig(
         log_dir=Path(config.repograph_dir) / "logs",
         run_id=_run_id,
