@@ -10,6 +10,9 @@ from __future__ import annotations
 from functools import lru_cache
 
 from repograph.core.plugin_framework import PluginHookScheduler
+from repograph.observability import get_logger
+
+_logger = get_logger(__name__, subsystem="plugins")
 
 
 @lru_cache(maxsize=1)
@@ -64,7 +67,9 @@ def ensure_all_plugins_registered() -> None:
     ensure_default_exporters_registered()
     ensure_default_tracers_registered()
 
+    _logger.debug("all plugin families registered — firing on_registry_bootstrap")
     get_hook_scheduler().fire("on_registry_bootstrap")
+    _logger.debug("plugin bootstrap complete")
 
 
 def reset_hook_scheduler() -> None:

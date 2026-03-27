@@ -32,6 +32,9 @@ from repograph.core.plugin_framework.contracts import (
     TracerPlugin,
 )
 from repograph.core.plugin_framework.registry import PluginRegistry
+from repograph.observability import get_logger, log_swallowed, set_obs_context
+
+_logger = get_logger(__name__, subsystem="plugins")
 
 
 def _as_path(val: Any, *, name: str) -> Path:
@@ -81,14 +84,22 @@ class PluginHookScheduler:
 
     def fire(self, hook: HookName, *, kind: str | None = None, **kwargs: Any) -> list[HookExecution]:
         executions: list[HookExecution] = []
-        for plugin in self._plugins_for_hook(hook, kind=kind):
+        plugins = self._plugins_for_hook(hook, kind=kind)
+        _logger.debug("hook firing", hook=hook, plugin_count=len(plugins))
+        for plugin in plugins:
+            pid = plugin.plugin_id()
             result = error = None
+            set_obs_context(plugin_id=pid, hook=hook)
             try:
                 result = self._dispatch(plugin, hook, kwargs)
+                _logger.debug("plugin dispatched", hook=hook, plugin_id=pid)
             except Exception as exc:  # noqa: BLE001
                 error = f"{type(exc).__name__}: {exc}"
+                log_swallowed(_logger, "plugin dispatch failed", exc, hook=hook, plugin_id=pid)
+            finally:
+                set_obs_context(plugin_id="", hook="")
             executions.append(HookExecution(
-                plugin_id=plugin.plugin_id(),
+                plugin_id=pid,
                 plugin_kind=plugin.manifest.kind,
                 hook=hook,
                 result=result,
@@ -207,7 +218,11 @@ class PluginHookScheduler:
                 trace_dir,
                 **{k: v for k, v in kwargs.items() if k != "trace_dir"},
             )
-        if hook in ("on_registry_bootstrap", "on_files_discovered", "on_traces_analyzed", "on_export"):
+        # on_registry_bootstrap, on_files_discovered, on_traces_analyzed are signal-only hooks
+        # that carry no plugin method — they exist for ordering/coordination only.
+        # NOTE: on_export is intentionally NOT here; it dispatches to ExporterPlugin.export()
+        # above and must never fall through to this no-op branch.
+        if hook in ("on_registry_bootstrap", "on_files_discovered", "on_traces_analyzed"):
             return None
         raise TypeError(
             f"Plugin {plugin.plugin_id()!r} declared hook {hook!r} "

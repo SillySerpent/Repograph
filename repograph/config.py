@@ -13,6 +13,10 @@ from __future__ import annotations
 
 import os
 
+from repograph.observability import get_logger
+
+_logger = get_logger(__name__, subsystem="config")
+
 REPOGRAPH_DIR = ".repograph"
 # Optional YAML: extra top-level directory names to skip when indexing.
 # Read from ``.repograph/repograph.index.yaml`` first, then legacy repo-root file.
@@ -74,7 +78,13 @@ def _read_index_yaml(path: str) -> dict | None:
 
         with open(path, encoding="utf-8", errors="replace") as f:
             return yaml.safe_load(f) or {}
-    except Exception:
+    except Exception as exc:
+        _logger.warning(
+            "could not load index YAML — config file will be ignored",
+            path=path,
+            exc_type=type(exc).__name__,
+            exc_msg=str(exc),
+        )
         return None
 
 

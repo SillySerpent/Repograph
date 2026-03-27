@@ -6,6 +6,9 @@ import os
 
 from repograph.core.models import FileRecord, DiffResult, AffectedSet
 from repograph.graph_store.store import GraphStore
+from repograph.observability import get_logger, log_degraded
+
+_logger = get_logger(__name__, subsystem="incremental")
 
 
 def expand_reparse_paths_for_incremental(
@@ -53,16 +56,28 @@ def expand_reparse_paths_for_incremental(
                 p = r[0]
                 if p and p in current_paths:
                     out.add(p)
-        except Exception:
-            pass
+        except Exception as exc:
+            log_degraded(
+                _logger,
+                "reverse-CALLS expansion failed — affected callers may be incomplete",
+                exc=exc,
+                partial_result="callers for this file skipped",
+                file_path=fp,
+            )
 
     for fp in added | changed | removed:
         try:
             for im in store.get_importers(fp):
                 if im in current_paths:
                     out.add(im)
-        except Exception:
-            pass
+        except Exception as exc:
+            log_degraded(
+                _logger,
+                "reverse-IMPORTS expansion failed — affected importers may be incomplete",
+                exc=exc,
+                partial_result="importers for this file skipped",
+                file_path=fp,
+            )
 
     return {p for p in out if p in current_paths}
 
@@ -78,14 +93,27 @@ class IncrementalDiff:
             try:
                 with open(self._index_path, encoding="utf-8") as f:
                     return json.load(f)
-            except Exception:
-                pass
+            except Exception as exc:
+                log_degraded(
+                    _logger,
+                    "file index could not be loaded — treating all files as new",
+                    exc=exc,
+                    partial_result="empty index",
+                    index_path=self._index_path,
+                )
         return {}
 
     def compute(self, current_map: dict[str, FileRecord]) -> DiffResult:
         """Compare current files against stored index."""
         stored = self._load_index()
-        current_hashes = {path: fr.source_hash for path, fr in current_map.items()}
+        current_hashes: dict[str, str | None] = {}
+        for path, fr in current_map.items():
+            if fr.source_hash is None:
+                _logger.warning(
+                    "FileRecord has no source_hash — treating file as changed",
+                    path=path,
+                )
+            current_hashes[path] = fr.source_hash
 
         added = {p for p in current_hashes if p not in stored}
         removed = {p for p in stored if p not in current_hashes}

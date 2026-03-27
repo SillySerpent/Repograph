@@ -30,6 +30,7 @@ from repograph.graph_store.store_queries_analytics import (
     ENTRY_POINT_TEST_COVERAGE_DEFINITION,
 )
 from repograph.core.evidence import summarize_findings
+from repograph.observability import ObservableMixin
 
 
 def _build_report_warnings(
@@ -66,7 +67,7 @@ def _build_report_warnings(
     return warnings
 
 
-class RepoGraphService:
+class RepoGraphService(ObservableMixin):
     """High-level API for indexing and querying a repository with RepoGraph.
 
     Parameters
@@ -80,6 +81,8 @@ class RepoGraphService:
         Whether to analyse git history for co-change coupling (Phase 12).
         Defaults to True if a ``.git`` directory is present, False otherwise.
     """
+
+    _obs_subsystem = "services"
 
     def __init__(
         self,

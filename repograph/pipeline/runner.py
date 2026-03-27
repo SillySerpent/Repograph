@@ -47,8 +47,19 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from repograph.core.models import FileRecord, ParsedFile
 from repograph.graph_store.store import GraphStore
+from repograph.observability import (
+    ObservabilityConfig,
+    get_logger,
+    init_observability,
+    new_run_id,
+    set_obs_context,
+    shutdown_observability,
+    span,
+)
 from repograph.parsing.symbol_table import SymbolTable
 from repograph.utils import logging as rg_log
+
+_logger = get_logger(__name__, subsystem="pipeline")
 
 console = Console()
 
@@ -247,6 +258,14 @@ def run_full_pipeline(config: RunConfig) -> dict:
         build_health_failure_report, build_health_report, write_health_json,
     )
 
+    _run_id = new_run_id()
+    init_observability(ObservabilityConfig(
+        log_dir=Path(config.repograph_dir) / "logs",
+        run_id=_run_id,
+    ))
+    set_obs_context(phase="full_sync")
+    _logger.info("full pipeline started", repo_root=config.repo_root, run_id=_run_id)
+
     write_sync_lock(config.repograph_dir, mode="full",
                     repo_root=config.repo_root, phase="starting")
     store: GraphStore | None = None
@@ -359,6 +378,7 @@ def run_full_pipeline(config: RunConfig) -> dict:
                 ),
             )
         except Exception: pass
+        _logger.error("full pipeline failed", exc_type=type(exc).__name__, exc_msg=str(exc))
         console.print(f"[red bold]Sync failed:[/] {exc}")
         raise
     finally:
@@ -366,6 +386,7 @@ def run_full_pipeline(config: RunConfig) -> dict:
         if store is not None:
             try: store.close()
             except Exception: pass
+        shutdown_observability()
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +412,14 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
     from repograph.pipeline.health import (
         build_health_failure_report, build_health_report, write_health_json,
     )
+
+    _run_id = new_run_id()
+    init_observability(ObservabilityConfig(
+        log_dir=Path(config.repograph_dir) / "logs",
+        run_id=_run_id,
+    ))
+    set_obs_context(phase="incremental_sync")
+    _logger.info("incremental pipeline started", repo_root=config.repo_root, run_id=_run_id)
 
     write_sync_lock(config.repograph_dir, mode="incremental",
                     repo_root=config.repo_root, phase="starting")
@@ -542,6 +571,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
                 ),
             )
         except Exception: pass
+        _logger.error("incremental pipeline failed", exc_type=type(exc).__name__, exc_msg=str(exc))
         console.print(f"[red bold]Incremental sync failed:[/] {exc}")
         raise
     finally:
@@ -549,6 +579,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
         if store is not None:
             try: store.close()
             except Exception: pass
+        shutdown_observability()
 
 
 def run_full_sync_with_tests(

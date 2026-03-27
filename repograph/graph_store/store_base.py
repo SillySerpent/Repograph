@@ -7,6 +7,9 @@ from typing import Any
 from repograph.graph_store.kuzu_loader import kuzu
 from repograph.graph_store.schema import ALL_NODE_TABLES, ALL_REL_TABLES
 from repograph.graph_store.store_utils import _delete_db_dir
+from repograph.observability import get_logger
+
+_logger = get_logger(__name__, subsystem="graph_store")
 
 
 class GraphStoreBase:
@@ -64,7 +67,7 @@ class GraphStoreBase:
                 "ALTER TABLE Function ADD is_test BOOLEAN DEFAULT false"
             )
         except Exception:
-            pass
+            _logger.debug("migration v1.3: is_test column already exists — skipping")
 
     def _migrate_function_entry_score_details(self) -> None:
         """schema v1.4 — Add entry-score breakdown columns.
@@ -84,7 +87,7 @@ class GraphStoreBase:
             try:
                 self._require_conn().execute(ddl)
             except Exception:
-                pass  # column already exists — safe to continue
+                _logger.debug("migration v1.4: entry_score column already exists — skipping", ddl=ddl)
 
     def _migrate_function_runtime_overlay_columns(self) -> None:
         """schema v1.4 — Persist runtime trace observations on Function nodes."""
@@ -97,7 +100,7 @@ class GraphStoreBase:
             try:
                 self._require_conn().execute(ddl)
             except Exception:
-                pass
+                _logger.debug("migration v1.4: runtime_overlay column already exists — skipping", ddl=ddl)
 
     def _probe_calls_extra_lines_column(self) -> bool:
         """True when CALLS.extra_site_lines exists (schema >= 1.1)."""
@@ -149,14 +152,33 @@ class GraphStoreBase:
 
     @staticmethod
     def _esc(s: str) -> str:
-        """Escape a string value for safe Cypher interpolation."""
-        if s is None:
-            return ""
+        """Escape a string value for safe Cypher interpolation. Caller must not pass None."""
         return str(s).replace("\\", "\\\\").replace("'", "\\'")
 
+    # Known KuzuDB error message fragments that indicate a missing node during
+    # relationship insertion.  All other exceptions are re-raised so that real
+    # errors (schema mismatches, lock conflicts, query syntax) are never swallowed.
+    _MISSING_NODE_PATTERNS: tuple[str, ...] = (
+        "does not exist",
+        "node does not exist",
+        "runtime exception: node",
+    )
+
     def _exec_rel(self, cypher: str) -> None:
-        """Execute a relationship insertion. Silently skips missing-node errors."""
+        """Execute a relationship insertion.
+
+        Skips operations where one endpoint node is missing (a known expected
+        case during incremental sync when a callee has not yet been upserted).
+        All other exceptions propagate so real errors remain visible.
+        """
         try:
             self._require_conn().execute(cypher)
-        except Exception:
-            pass
+        except Exception as exc:
+            err = str(exc).lower()
+            if any(pat in err for pat in self._MISSING_NODE_PATTERNS):
+                _logger.debug(
+                    "relationship insertion skipped — missing node",
+                    exc_msg=str(exc),
+                )
+            else:
+                raise
