@@ -325,10 +325,13 @@ class PathwayStep:
     function_name: str
     file_path: str
     line_start: int
-    role: str   # "entry" | "handler" | "service" | "adapter" | "terminal"
+    role: str   # "entry" | "handler" | "service" | "adapter" | "terminal" | "cross_lang_http"
     calls_next: list[str]   # function_ids
     confidence: float = 1.0
     decorators: list[str] = field(default_factory=list)
+    # Cross-language HTTP traversal metadata (set when step is reached via MAKES_HTTP_CALL)
+    cross_lang_step: bool = False
+    http_method: str = ""
 
 
 @dataclass

@@ -25,7 +25,7 @@ _ADAPTER_FILE = re.compile(r"/(adapters?|repositories?|db|models?|database)/", r
 
 
 class PathwayAssembler:
-    """Assembles PathwayDoc from an entry function ID using BFS over CALLS edges."""
+    """Assembles PathwayDoc from an entry function ID using BFS over CALLS and MAKES_HTTP_CALL edges."""
 
     def __init__(self, store: GraphStore) -> None:
         self._store = store
@@ -46,10 +46,17 @@ class PathwayAssembler:
         steps: list[PathwayStep] = []
         visited: set[str] = set()
         edge_confidences: list[float] = []
-        queue: deque[tuple[str, int]] = deque([(entry_function_id, 0)])
+        # Queue: (func_id, order, via_http, http_method_used, lang_ref_file)
+        # lang_ref_file is the file path used for cross-language filtering of outgoing
+        # CALLS edges.  It starts as entry_file, but resets to a callee's own file
+        # when we cross a language boundary via MAKES_HTTP_CALL, so that further CALLS
+        # within that new language are not incorrectly blocked.
+        queue: deque[tuple[str, int, bool, str, str]] = deque(
+            [(entry_function_id, 0, False, "", entry_file)]
+        )
 
         while queue and len(steps) < MAX_PATHWAY_STEPS:
-            func_id, order = queue.popleft()
+            func_id, order, via_http, via_http_method, lang_ref_file = queue.popleft()
             if func_id in visited:
                 continue
             visited.add(func_id)
@@ -58,7 +65,12 @@ class PathwayAssembler:
             if not fn:
                 continue
 
-            role = self._infer_role(fn, order, steps)
+            # Steps reached via MAKES_HTTP_CALL get a dedicated role
+            role = "cross_lang_http" if via_http else self._infer_role(fn, order, steps)
+
+            # CALLS edges — filtered by cross-language guard using the current language
+            # reference file (not always the original entry_file: after an HTTP boundary
+            # crossing the reference resets to the callee's own language).
             outgoing = self._store.get_callees(func_id)
             outgoing_high = sorted(
                 [e for e in outgoing if e.get("confidence", 0) >= MIN_CONFIDENCE],
@@ -69,12 +81,23 @@ class PathwayAssembler:
             for e in outgoing_high:
                 callee_fn = self._get_fn(e["id"])
                 cfp = callee_fn.get("file_path", "") if callee_fn else ""
-                if callee_fn and should_skip_cross_language_step(entry_file, cfp):
+                if callee_fn and should_skip_cross_language_step(lang_ref_file, cfp):
                     continue
                 filtered.append(e)
             outgoing_high = filtered
 
-            calls_next = [e["id"] for e in outgoing_high]
+            # MAKES_HTTP_CALL edges — bypass the cross-language filter (they are
+            # explicitly cross-language by definition and should always be followed)
+            http_outgoing = self._store.get_http_callees(func_id)
+            http_outgoing_high = sorted(
+                [e for e in http_outgoing if e.get("confidence", 0) >= MIN_CONFIDENCE],
+                key=lambda e: -e.get("confidence", 0),
+            )[:MAX_FANOUT]
+
+            calls_next = (
+                [e["id"] for e in outgoing_high]
+                + [e["id"] for e in http_outgoing_high]
+            )
 
             step = PathwayStep(
                 order=order,
@@ -86,13 +109,28 @@ class PathwayAssembler:
                 calls_next=calls_next,
                 confidence=fn.get("entry_score", 1.0) or 1.0,
                 decorators=fn.get("decorators") or [],
+                cross_lang_step=via_http,
+                http_method=via_http_method,
             )
             steps.append(step)
 
+            # Enqueue CALLS successors — same language context propagates
             for e in outgoing_high:
                 edge_confidences.append(e.get("confidence", 1.0))
                 if e["id"] not in visited:
-                    queue.append((e["id"], order + 1))
+                    queue.append((e["id"], order + 1, False, "", lang_ref_file))
+
+            # Enqueue HTTP successors — language context resets to the callee's file
+            for e in http_outgoing_high:
+                edge_confidences.append(e.get("confidence", 1.0))
+                if e["id"] not in visited:
+                    callee_fn = self._get_fn(e["id"])
+                    callee_file = (
+                        callee_fn.get("file_path", "") if callee_fn else ""
+                    ) or ""
+                    queue.append(
+                        (e["id"], order + 1, True, e.get("http_method", ""), callee_file)
+                    )
 
         if len(steps) < 2:
             return None

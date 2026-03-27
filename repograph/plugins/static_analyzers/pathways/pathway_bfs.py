@@ -10,7 +10,7 @@ import os
 from collections import deque
 
 # Single source of truth — imported by p10_processes and pathways.assembler
-MAX_PATHWAY_STEPS = 25
+MAX_PATHWAY_STEPS = 50
 MAX_FANOUT = 4
 MIN_CONFIDENCE = 0.5
 MAX_PATHWAY_DEPTH = 15

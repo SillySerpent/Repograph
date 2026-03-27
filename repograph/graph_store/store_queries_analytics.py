@@ -181,6 +181,26 @@ class GraphStoreAnalytics(GraphStoreBase):
             for r in rows
         ]
 
+    def get_http_callees(self, function_id: str) -> list[dict]:
+        """Return functions reachable via MAKES_HTTP_CALL from the given function.
+
+        Returns the same shape as get_callees() for uniform BFS consumption.
+        The ``reason`` field is set to ``"http"`` to distinguish from CALLS edges.
+        """
+        rows = self.query(
+            """
+            MATCH (f:Function {id: $id})-[e:MAKES_HTTP_CALL]->(callee:Function)
+            RETURN callee.id, callee.qualified_name, callee.file_path, e.confidence, e.http_method
+            """,
+            {"id": function_id}
+        )
+        return [
+            {"id": r[0], "qualified_name": r[1], "file_path": r[2],
+             "confidence": r[3], "reason": "http",
+             "edge_type": "http", "http_method": r[4]}
+            for r in rows
+        ]
+
     def get_importers(self, file_path: str) -> list[str]:
         """Return paths of all files that import the given file."""
         from repograph.core.models import NodeID
