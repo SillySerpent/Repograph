@@ -2,10 +2,219 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
+import os
 from collections import Counter, defaultdict
 
 from repograph.core.models import CommunityNode, NodeID
 from repograph.graph_store.store import GraphStore
+
+_logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Incremental community caching (H4)
+# ---------------------------------------------------------------------------
+
+# If fewer than this fraction of total functions changed, attempt partial Leiden.
+_PARTIAL_RERUN_THRESHOLD = 0.05
+
+# Maximum tolerated cohesion drop (relative) before triggering full re-run.
+_COHESION_DROP_TOLERANCE = 0.20
+
+# Minimum confidence for edges used in community detection.
+_MIN_COMMUNITY_CONFIDENCE = 0.5
+
+
+def _snapshot_path(repograph_dir: str) -> str:
+    return os.path.join(repograph_dir, "meta", "community_snapshot.json")
+
+
+def save_community_snapshot(repograph_dir: str, store: GraphStore) -> None:
+    """Persist a compact snapshot of current community assignments for incremental caching.
+
+    The snapshot contains a stable hash and function count.  It is saved to
+    ``.repograph/meta/community_snapshot.json`` after every successful full or
+    partial community detection run.
+    """
+    try:
+        rows = store.query("MATCH (f:Function) RETURN f.id, f.community_id ORDER BY f.id")
+    except Exception as exc:
+        _logger.debug("community snapshot query failed: %s", exc)
+        return
+    assignments = [(r[0] or "", r[1] or "") for r in rows]
+    raw = "|".join(f"{fid}:{cid}" for fid, cid in sorted(assignments))
+    snapshot_hash = hashlib.sha256(raw.encode()).hexdigest()[:16]
+    path = _snapshot_path(repograph_dir)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"snapshot_hash": snapshot_hash, "total_functions": len(rows)}, f)
+
+
+def load_community_snapshot(repograph_dir: str) -> dict | None:
+    """Load the community snapshot, or None if it does not exist or is unreadable."""
+    path = _snapshot_path(repograph_dir)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as exc:
+        _logger.debug("community snapshot unreadable: %s", exc)
+        return None
+
+
+def run_partial(
+    store: GraphStore,
+    changed_fn_ids: set[str],
+    min_community_size: int = 8,
+) -> bool:
+    """Attempt a partial community reassignment for a small changed set.
+
+    Builds a subgraph of the affected communities (the changed functions plus all
+    functions currently in those communities), re-runs the Leiden algorithm on
+    just that subgraph, then maps the new partitions back to existing community IDs
+    via majority vote.  The result is validated against a cohesion-drop invariant
+    before being committed.
+
+    Returns ``True`` if the partial update was committed successfully.
+    Returns ``False`` to signal that the caller should fall back to a full
+    ``clear_communities()`` + ``run()`` cycle.
+    """
+    if not changed_fn_ids:
+        return True
+
+    try:
+        import igraph as ig  # type: ignore[import]
+        import leidenalg  # type: ignore[import]
+    except ImportError:
+        _logger.debug("leidenalg not available — skipping partial community update")
+        return False
+
+    all_functions = store.get_all_functions()
+    if not all_functions:
+        return True
+
+    all_fn_by_id: dict[str, dict] = {fn["id"]: fn for fn in all_functions}
+
+    # ── Identify communities affected by the changed functions ──────────────
+    changed_communities: set[str] = {
+        fn.get("community_id") or ""
+        for fn_id in changed_fn_ids
+        if (fn := all_fn_by_id.get(fn_id)) is not None
+    } - {""}
+
+    if not changed_communities:
+        _logger.debug("changed functions have no existing communities — need full re-run")
+        return False
+
+    # ── Build subgraph: affected community members + changed functions ───────
+    affected_fn_ids: set[str] = set(changed_fn_ids)
+    for fn in all_functions:
+        if (fn.get("community_id") or "") in changed_communities:
+            affected_fn_ids.add(fn["id"])
+
+    all_edges = store.get_all_call_edges()
+    conf_edges = [e for e in all_edges if e.get("confidence", 0) >= _MIN_COMMUNITY_CONFIDENCE]
+
+    # Expand subgraph to include both endpoints of any edge touching affected nodes
+    for e in conf_edges:
+        if e["from"] in affected_fn_ids or e["to"] in affected_fn_ids:
+            affected_fn_ids.add(e["from"])
+            affected_fn_ids.add(e["to"])
+
+    affected_fns = [fn for fn in all_functions if fn["id"] in affected_fn_ids]
+    if len(affected_fns) < 2:
+        return False
+
+    sub_id_to_idx = {fn["id"]: i for i, fn in enumerate(affected_fns)}
+    sub_edges: list[tuple[int, int]] = []
+    for e in conf_edges:
+        src = sub_id_to_idx.get(e["from"])
+        tgt = sub_id_to_idx.get(e["to"])
+        if src is not None and tgt is not None and src != tgt:
+            sub_edges.append((src, tgt))
+
+    g_sub = ig.Graph(n=len(affected_fns), edges=sub_edges, directed=False)
+    g_sub.simplify()
+    if g_sub.ecount() == 0:
+        return False
+
+    # ── Run Leiden on the subgraph ───────────────────────────────────────────
+    partition = leidenalg.find_partition(g_sub, leidenalg.ModularityVertexPartition)
+    sub_membership: list[int] = partition.membership
+
+    # Map each new subgraph community → existing community_id via majority vote
+    new_comm_members: dict[int, list[dict]] = defaultdict(list)
+    for i, fn in enumerate(affected_fns):
+        new_comm_members[sub_membership[i]].append(fn)
+
+    new_comm_to_existing: dict[int, str] = {}
+    for new_cid, members in new_comm_members.items():
+        votes = Counter(fn.get("community_id") or "" for fn in members)
+        votes.pop("", None)
+        if not votes:
+            _logger.debug(
+                "subgraph community %d has no existing mapping — falling back", new_cid
+            )
+            return False
+        new_comm_to_existing[new_cid] = votes.most_common(1)[0][0]
+
+    # ── Cohesion invariant check ─────────────────────────────────────────────
+    edge_pairs: set[tuple[str, str]] = set()
+    for e in conf_edges:
+        edge_pairs.add((e["from"], e["to"]))
+        edge_pairs.add((e["to"], e["from"]))
+
+    def _cohesion(members: set[str]) -> float:
+        n = len(members)
+        if n <= 1:
+            return 1.0
+        internal = sum(1 for a in members for b in members if a != b and (a, b) in edge_pairs)
+        internal //= 2
+        return internal / (n * (n - 1) / 2)
+
+    old_community_members: dict[str, set[str]] = defaultdict(set)
+    for fn in all_functions:
+        cid = fn.get("community_id") or ""
+        if cid in changed_communities:
+            old_community_members[cid].add(fn["id"])
+
+    new_community_members: dict[str, set[str]] = defaultdict(set)
+    for i, fn in enumerate(affected_fns):
+        new_cid = new_comm_to_existing.get(sub_membership[i], fn.get("community_id") or "")
+        new_community_members[new_cid].add(fn["id"])
+    for fn in all_functions:
+        if fn["id"] not in affected_fn_ids:
+            cid = fn.get("community_id") or ""
+            if cid:
+                new_community_members[cid].add(fn["id"])
+
+    for cid in changed_communities:
+        old_c = _cohesion(old_community_members.get(cid, set()))
+        new_c = _cohesion(new_community_members.get(cid, set()))
+        if old_c > 0.1 and new_c < old_c * (1 - _COHESION_DROP_TOLERANCE):
+            _logger.debug(
+                "community %s cohesion drop %.2f → %.2f exceeds tolerance — full re-run",
+                cid, old_c, new_c,
+            )
+            return False
+
+    # ── Commit updates ───────────────────────────────────────────────────────
+    updated = 0
+    for i, fn in enumerate(affected_fns):
+        new_cid = new_comm_to_existing.get(sub_membership[i], "")
+        old_cid = fn.get("community_id") or ""
+        if new_cid and new_cid != old_cid:
+            store.update_function_flags(fn["id"], community_id=new_cid)
+            try:
+                store.insert_member_of_edge(fn["id"], new_cid)
+            except Exception:
+                pass
+            updated += 1
+
+    _logger.debug("partial community update: %d function(s) reassigned", updated)
+    return True
 
 
 def run(store: GraphStore, min_community_size: int = 8) -> None:

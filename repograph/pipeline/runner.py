@@ -121,6 +121,21 @@ class RunConfig:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
+def _get_function_ids_in_paths(store: GraphStore, file_paths: set[str]) -> set[str]:
+    """Return the set of function IDs whose file_path is in ``file_paths``."""
+    if not file_paths:
+        return set()
+    try:
+        rows = store.query(
+            "MATCH (f:Function) WHERE f.file_path IN $fps RETURN f.id",
+            {"fps": list(file_paths)},
+        )
+        return {r[0] for r in rows}
+    except Exception:
+        return set()
+
+
 def _run_phases_parallel(
     config: RunConfig,
     parsed: list,
@@ -394,6 +409,7 @@ def run_full_pipeline(config: RunConfig) -> dict:
 
             progress.add_task("Phase 9: Detecting communities...", total=None)
             p09_communities.run(store, min_community_size=config.min_community_size)
+            p09_communities.save_community_snapshot(config.repograph_dir, store)
 
             progress.add_task("Phase 10: Scoring entry points...", total=None)
             p10_processes.run(store)
@@ -605,11 +621,25 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
                 reparse_paths=reparse_paths,
             )
 
-        store.clear_communities()
         store.clear_pathways()
         store.clear_processes()
 
-        p09_communities.run(store, min_community_size=config.min_community_size)
+        # H4: try partial community update for small change sets; fall back to full re-run.
+        community_snapshot = p09_communities.load_community_snapshot(config.repograph_dir)
+        _did_partial = False
+        if community_snapshot and reparse_paths:
+            changed_fns = _get_function_ids_in_paths(store, reparse_paths)
+            total = community_snapshot.get("total_functions", 0)
+            if total > 0 and len(changed_fns) < total * p09_communities._PARTIAL_RERUN_THRESHOLD:
+                _did_partial = p09_communities.run_partial(
+                    store, changed_fns, min_community_size=config.min_community_size,
+                )
+
+        if not _did_partial:
+            store.clear_communities()
+            p09_communities.run(store, min_community_size=config.min_community_size)
+
+        p09_communities.save_community_snapshot(config.repograph_dir, store)
         p10_processes.run(store)
 
         # ── PLUGIN HOOKS (same sequence as full pipeline) ─────────────────
