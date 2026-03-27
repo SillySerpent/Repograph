@@ -15,8 +15,9 @@ def _print_banner() -> None:
     print(
         f"  {ui._d('Run any command from a terminal in any directory, for example:')}\n"
         f"    {ui._c('repograph sync --full')}\n"
+        f"    {ui._c('repograph summary')}\n"
         f"    {ui._c('repograph pathway list')}\n"
-        f"    {ui._c('repograph trace install')}\n\n"
+        f"    {ui._c('repograph report')}\n\n"
         f"  {ui._b('This browser')} groups every command with short explanations and common flags — "
         f"beyond what {ui._d('repograph --help')} shows (names only).\n"
         f"  {ui._d(pick_help_hint)}\n"
