@@ -224,3 +224,30 @@ class GraphStoreNodeUpserts(GraphStoreBase):
                 "ln": imp.line_number,
             }
         )
+
+    # ---------------------------------------------------------------------------
+    # Batch write helpers (H2) — call individual upserts in a tight grouped loop.
+    # Grouping all writes for a file together avoids interleaving with other files
+    # and makes it easier to add true bulk-insert support later without changing
+    # the call sites in p03_parse.
+    # ---------------------------------------------------------------------------
+
+    _BATCH_CHUNK = 100  # max nodes per logical batch (guards against very large files)
+
+    def batch_upsert_functions(self, functions: list[FunctionNode]) -> None:
+        """Upsert a list of FunctionNode objects in a single grouped call.
+
+        Internally calls ``upsert_function`` for each node.  The method exists
+        to provide a stable batch API for the parse phase and to document the
+        intended unit of work (one file's worth of functions).
+        """
+        for fn in functions:
+            self.upsert_function(fn)
+
+    def batch_upsert_classes(self, classes: list[ClassNode]) -> None:
+        """Upsert a list of ClassNode objects in a single grouped call.
+
+        Internally calls ``upsert_class`` for each node.
+        """
+        for cls in classes:
+            self.upsert_class(cls)

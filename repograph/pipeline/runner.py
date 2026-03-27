@@ -121,6 +121,63 @@ class RunConfig:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _run_phases_parallel(
+    config: RunConfig,
+    parsed: list,
+    store: GraphStore,
+    symbol_table: object,
+    *,
+    include_git: bool = False,
+    reparse_paths: set | None = None,
+) -> None:
+    """Run phases p04-p08 (+ p05c, p06b, optionally p12) in a thread pool.
+
+    Each phase is independent: it only reads immutable data produced by p03
+    (ParsedFile list, SymbolTable) and writes a different subset of relationship
+    types to the graph store.  KuzuDB serialises concurrent DB writes internally.
+
+    Failures in individual phases are handled according to ``config.strict`` and
+    ``config.continue_on_error``; they never silently discard work.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from repograph.pipeline.phases import (
+        p04_imports, p05_calls, p05b_callbacks, p05c_http_calls,
+        p06_heritage, p06b_layer_classify, p07_variables, p08_types,
+    )
+
+    phase_tasks: dict[str, object] = {
+        "p04_imports":   lambda: p04_imports.run(parsed, store, symbol_table, config.repo_root),
+        "p05_calls":     lambda: p05_calls.run(parsed, store, symbol_table),
+        "p05b_callbacks": lambda: p05b_callbacks.run(parsed, store, symbol_table),
+        "p05c_http":     lambda: p05c_http_calls.run(parsed, store),
+        "p06_heritage":  lambda: p06_heritage.run(parsed, store, symbol_table),
+        "p06b_layers":   lambda: p06b_layer_classify.run(parsed, store),
+        "p07_variables": lambda: (
+            p07_variables.run(parsed, store, reparse_paths=reparse_paths)
+            if reparse_paths is not None
+            else p07_variables.run(parsed, store)
+        ),
+        "p08_types":     lambda: p08_types.run(parsed, store, symbol_table),
+    }
+    if include_git:
+        from repograph.pipeline.phases import p12_coupling
+        phase_tasks["p12_coupling"] = lambda: p12_coupling.run(store, config.repo_root)
+
+    failures: list[tuple[str, BaseException]] = []
+
+    with ThreadPoolExecutor(max_workers=len(phase_tasks)) as ex:
+        future_to_name = {ex.submit(fn): name for name, fn in phase_tasks.items()}
+        for future in as_completed(future_to_name):
+            name = future_to_name[future]
+            exc = future.exception()
+            if exc:
+                failures.append((name, exc))
+
+    for name, exc in failures:
+        _handle_optional_phase_failure(config, f"phase {name}", exc)
+
+
 def _run_experimental_pipeline_phases(
     config: RunConfig,
     store: GraphStore,
@@ -325,39 +382,21 @@ def run_full_pipeline(config: RunConfig) -> dict:
             progress.add_task("Phase 3b: Applying framework tags...", total=None)
             p03b_framework_tags.run(parsed, store)
 
-            progress.add_task("Phase 4: Resolving imports...", total=None)
-            p04_imports.run(parsed, store, symbol_table, config.repo_root)
-
-            progress.add_task("Phase 5: Resolving calls...", total=None)
-            p05_calls.run(parsed, store, symbol_table)
-
-            progress.add_task("Phase 5b: Detecting callback registrations...", total=None)
-            p05b_callbacks.run(parsed, store, symbol_table)
-
-            progress.add_task("Phase 5c: Detecting HTTP call edges...", total=None)
-            p05c_http_calls.run(parsed, store)
-
-            progress.add_task("Phase 6: Resolving inheritance...", total=None)
-            p06_heritage.run(parsed, store, symbol_table)
-
-            progress.add_task("Phase 6b: Classifying architecture layers...", total=None)
-            p06b_layer_classify.run(parsed, store)
-
-            progress.add_task("Phase 7: Tracking variables...", total=None)
-            p07_variables.run(parsed, store)
-
-            progress.add_task("Phase 8: Analysing type annotations...", total=None)
-            p08_types.run(parsed, store, symbol_table)
+            # Phases 4-8 (+ 5c, 6b, 12) are mutually independent: each writes a
+            # different relationship type and only reads immutable parsed/symbol
+            # data from Phase 3.  Run them in a thread pool to parallelise the
+            # CPU-bound resolution work.  KuzuDB serialises the actual DB writes.
+            progress.add_task("Phases 4-8: Resolving relationships (parallel)...", total=None)
+            _run_phases_parallel(
+                config, parsed, store, symbol_table,
+                include_git=config.include_git,
+            )
 
             progress.add_task("Phase 9: Detecting communities...", total=None)
             p09_communities.run(store, min_community_size=config.min_community_size)
 
             progress.add_task("Phase 10: Scoring entry points...", total=None)
             p10_processes.run(store)
-
-            if config.include_git:
-                progress.add_task("Phase 12: Analyzing git coupling...", total=None)
-                p12_coupling.run(store, config.repo_root)
 
             if config.include_embeddings:
                 progress.add_task("Phase 13: Building embeddings...", total=None)
@@ -560,14 +599,11 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
 
             parsed = p03_parse.run(reparse_files, store, symbol_table)
             p03b_framework_tags.run(parsed, store)
-            p04_imports.run(parsed, store, symbol_table, config.repo_root)
-            p05_calls.run(parsed, store, symbol_table)
-            p05b_callbacks.run(parsed, store, symbol_table)
-            p05c_http_calls.run(parsed, store)
-            p06_heritage.run(parsed, store, symbol_table)
-            p06b_layer_classify.run(parsed, store)
-            p07_variables.run(parsed, store, reparse_paths=reparse_paths)
-            p08_types.run(parsed, store, symbol_table)
+            _run_phases_parallel(
+                config, parsed, store, symbol_table,
+                include_git=False,
+                reparse_paths=reparse_paths,
+            )
 
         store.clear_communities()
         store.clear_pathways()

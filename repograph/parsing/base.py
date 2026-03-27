@@ -1,11 +1,19 @@
 """Base parser protocol and tree-sitter utilities shared across all language parsers."""
 from __future__ import annotations
 
+import threading
 from abc import ABC, abstractmethod
 
 import tree_sitter as ts
 
 from repograph.core.models import ParsedFile, FileRecord
+
+# Thread-local storage so each thread gets its own ts.Parser instance.
+# tree-sitter Parser objects are NOT thread-safe; sharing one instance across
+# threads causes silent corruption.  The plugin instances themselves ARE shared
+# (they are singletons in the registry), so thread-local storage is the right
+# layer at which to isolate the underlying ts.Parser.
+_tl: threading.local = threading.local()
 
 
 class BaseParser(ABC):
@@ -14,13 +22,24 @@ class BaseParser(ABC):
     language_name: str = ""
 
     def __init__(self) -> None:
+        # _parser is no longer used; kept for backward compatibility only.
+        # The active parser is always fetched from thread-local storage via the
+        # `parser` property.
         self._parser: ts.Parser | None = None
 
     @property
     def parser(self) -> ts.Parser:
-        if self._parser is None:
-            self._parser = self._build_parser()
-        return self._parser
+        """Return a thread-local ts.Parser for this language.
+
+        Each thread gets its own ts.Parser instance (keyed by subclass name) so
+        multiple threads can parse files concurrently without data races.
+        """
+        key = type(self).__name__
+        if not hasattr(_tl, "parsers"):
+            _tl.parsers = {}
+        if key not in _tl.parsers:
+            _tl.parsers[key] = self._build_parser()
+        return _tl.parsers[key]
 
     @abstractmethod
     def _build_parser(self) -> ts.Parser:
