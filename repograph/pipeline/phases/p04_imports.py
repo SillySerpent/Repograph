@@ -43,23 +43,43 @@ def run(
             else:
                 resolved = None
 
+            # F5: cross-language fallback — try the other language's index when
+            # same-language resolution fails.  Covers monorepo patterns where
+            # Python explicitly imports from JS or vice versa.
+            cross_lang = False
+            if resolved is None:
+                resolved = _try_cross_language_resolve(
+                    imp.module_path, pf.file_record.path, lang,
+                    python_module_index, js_path_index, repo_root,
+                )
+                cross_lang = resolved is not None
+
             if resolved and resolved in path_index:
                 store.upsert_import(_update_resolved(imp, resolved))
 
                 from_id = NodeID.make_file_id(pf.file_record.path)
                 to_id = NodeID.make_file_id(resolved)
+                confidence = 0.7 if cross_lang else CONF_IMPORT_STATIC
                 edge = ImportEdge(
                     from_file_id=from_id,
                     to_file_id=to_id,
                     specific_symbols=imp.imported_names,
                     is_wildcard=imp.is_wildcard,
                     line_number=imp.line_number,
-                    confidence=CONF_IMPORT_STATIC,
+                    confidence=confidence,
                 )
                 try:
                     store.insert_import_edge(edge)
                 except Exception:
                     pass
+
+                # For cross-language symbol imports, create CALLS edges for
+                # any call site in this file that references the imported symbol.
+                if cross_lang and imp.imported_names:
+                    target_pf = path_index[resolved]
+                    _create_cross_lang_call_edges(
+                        pf, target_pf, imp.imported_names, store, symbol_table
+                    )
 
                 imp.resolved_path = resolved
 
@@ -421,6 +441,91 @@ def _normalise_path(path: str) -> str:
         elif part and part != ".":
             resolved.append(part)
     return "/".join(resolved)
+
+
+# ---------------------------------------------------------------------------
+# F5: Cross-language resolution helpers
+# ---------------------------------------------------------------------------
+
+def _try_cross_language_resolve(
+    module_path: str,
+    importing_file: str,
+    lang: str,
+    python_module_index: dict[str, str],
+    js_path_index: dict[str, str],
+    repo_root: str,
+) -> str | None:
+    """Attempt to resolve an import against the *other* language's index.
+
+    Covers monorepo patterns where Python explicitly imports from a JS/TS
+    module (via bridges like py_mini_racer) or vice versa.  Returns the
+    resolved relative file path, or None if no cross-language match found.
+    """
+    if lang == "python":
+        # The JS resolver requires a leading ./ for relative imports; skip
+        # external-package heuristic and check the path index directly.
+        result = js_path_index.get(module_path)
+        if result:
+            return result
+        # Also try with relative specifier conversion
+        dotted = "./" + module_path if not module_path.startswith(".") else module_path
+        return _resolve_js_import(dotted, importing_file, js_path_index)
+    if lang in ("javascript", "typescript"):
+        return _resolve_python_import(
+            module_path, importing_file, python_module_index, repo_root
+        )
+    return None
+
+
+def _create_cross_lang_call_edges(
+    src_pf: ParsedFile,
+    target_pf: ParsedFile,
+    imported_names: list[str],
+    store: GraphStore,
+    symbol_table: SymbolTable,
+) -> None:
+    """Create CALLS edges for cross-language symbol imports.
+
+    For each explicitly imported symbol name, looks up the target function in
+    the SymbolTable and creates a CALLS edge from any function in src_pf that
+    references the symbol in a call site.  Edges get confidence 0.7 and reason
+    ``"cross_lang_import"``.
+    """
+    target_path = target_pf.file_record.path if target_pf.file_record else ""
+    if not target_path:
+        return
+
+    # Build a call-site index: symbol_name → [caller_fn_id]
+    cs_index: dict[str, list[str]] = {}
+    for cs in src_pf.call_sites:
+        callee = cs.callee_text or ""
+        simple_name = callee.split(".")[-1]  # handle "module.fn" → "fn"
+        cs_index.setdefault(simple_name, []).append(cs.caller_function_id)
+        cs_index.setdefault(callee, []).append(cs.caller_function_id)
+
+    for sym_name in imported_names:
+        entries = symbol_table.lookup_in_file(target_path, sym_name)
+        if not entries:
+            continue
+        callers = set(cs_index.get(sym_name, []))
+        if not callers:
+            continue
+        for entry in entries:
+            for caller_id in callers:
+                if not caller_id:
+                    continue
+                edge = CallEdge(
+                    from_function_id=caller_id,
+                    to_function_id=entry.node_id,
+                    call_site_line=0,
+                    argument_names=[],
+                    confidence=0.7,
+                    reason="cross_lang_import",
+                )
+                try:
+                    store.insert_call_edge(edge)
+                except Exception:
+                    pass
 
 
 # ---------------------------------------------------------------------------
