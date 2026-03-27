@@ -195,9 +195,13 @@ class ParserPlugin(RepoGraphPlugin, ABC):
 class FrameworkAdapterPlugin(RepoGraphPlugin, ABC):
     """Enriches a ParsedFile with framework metadata.  Fires on: on_file_parsed.
 
-    Returns a dict that may include:
+    Returns a dict that must conform to the standard adapter output schema:
       frameworks: list[str]        — detected framework names
-      route_functions: list[str]   — route handler qualified names
+      route_functions: list[dict]  — each: {qualified_name, http_method, route_path}
+      page_components: list[str]   — qualified names of page/view components
+      server_actions: list[str]    — qualified names of server actions
+      import_modules: list[str]    — (internal) matched import module paths
+    All keys are optional; consumers must handle missing keys gracefully.
     """
 
     @abstractmethod

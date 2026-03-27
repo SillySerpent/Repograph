@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from repograph.core.plugin_framework import FrameworkAdapterPlugin, PluginManifest
 
-_HTTP_DECORATOR_SUFFIXES = {"route"}
-
 
 class FlaskFrameworkAdapterPlugin(FrameworkAdapterPlugin):
     manifest = PluginManifest(
@@ -29,7 +27,11 @@ class FlaskFrameworkAdapterPlugin(FrameworkAdapterPlugin):
         for fn in parsed_file.functions:
             decorators = fn.decorators or []
             if any(dec == "app.route" or dec.endswith(".route") or dec == "route" for dec in decorators):
-                route_functions.append(fn.qualified_name)
+                route_functions.append({
+                    "qualified_name": fn.qualified_name,
+                    "http_method": fn.http_method,
+                    "route_path": fn.route_path,
+                })
 
         detected = bool(route_functions) or any(mod.startswith("flask") for mod in imports)
         if not detected:
@@ -37,6 +39,8 @@ class FlaskFrameworkAdapterPlugin(FrameworkAdapterPlugin):
         return {
             "frameworks": ["flask"],
             "route_functions": route_functions,
+            "page_components": [],
+            "server_actions": [],
             "import_modules": sorted(mod for mod in imports if mod.startswith("flask")),
         }
 

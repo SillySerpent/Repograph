@@ -391,6 +391,22 @@ class GraphStoreRelWrites(GraphStoreBase):
                 exc_msg=str(exc),
             )
 
+    def update_file_layer(self, file_id: str, layer: str) -> None:
+        """Set the layer field on a File node (schema v1.6)."""
+        fid = self._esc(file_id)
+        l_e = self._esc(layer)
+        try:
+            self._require_conn().execute(
+                f"MATCH (f:File {{id:'{fid}'}}) SET f.layer='{l_e}'"
+            )
+        except Exception as exc:
+            _logger.warning(
+                "update_file_layer failed",
+                file_id=file_id,
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
+
     def insert_makes_http_call_edge(
         self,
         from_id: str,

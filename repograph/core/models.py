@@ -135,6 +135,10 @@ class FunctionNode:
     #   "dead_in_production"  — only callers are in tests/ or scripts/ directories
     #   ""                    — not dead, or context not yet determined
     dead_context: str = ""
+    # HTTP route metadata — set by Python parser (F2) when a route decorator is detected.
+    # Populated only for Flask/FastAPI-style route handler functions.
+    route_path: str = ""
+    http_method: str = ""
     # Python: ``from M import sym`` / ``import M`` inside function body (Phase 4).
     inline_imports: list[tuple[str, str]] = field(default_factory=list)
 

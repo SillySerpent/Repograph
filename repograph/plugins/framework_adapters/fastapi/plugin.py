@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from repograph.core.plugin_framework import FrameworkAdapterPlugin, PluginManifest
 
-_ROUTE_DECORATOR_SUFFIXES = (".get", ".post", ".put", ".patch", ".delete", ".websocket")
+_DECORATOR_HTTP_METHOD: dict[str, str] = {
+    ".get": "GET",
+    ".post": "POST",
+    ".put": "PUT",
+    ".patch": "PATCH",
+    ".delete": "DELETE",
+    ".websocket": "WEBSOCKET",
+}
 
 
 class FastAPIFrameworkAdapterPlugin(FrameworkAdapterPlugin):
@@ -28,8 +35,15 @@ class FastAPIFrameworkAdapterPlugin(FrameworkAdapterPlugin):
         route_functions = []
         for fn in parsed_file.functions:
             decorators = fn.decorators or []
-            if any(dec.endswith(_ROUTE_DECORATOR_SUFFIXES) for dec in decorators):
-                route_functions.append(fn.qualified_name)
+            for dec in decorators:
+                for suffix, method in _DECORATOR_HTTP_METHOD.items():
+                    if dec.endswith(suffix):
+                        route_functions.append({
+                            "qualified_name": fn.qualified_name,
+                            "http_method": fn.http_method or method,
+                            "route_path": fn.route_path,
+                        })
+                        break
 
         detected = bool(route_functions) or any(mod.startswith("fastapi") for mod in imports)
         if not detected:
@@ -37,6 +51,8 @@ class FastAPIFrameworkAdapterPlugin(FrameworkAdapterPlugin):
         return {
             "frameworks": ["fastapi"],
             "route_functions": route_functions,
+            "page_components": [],
+            "server_actions": [],
             "import_modules": sorted(mod for mod in imports if mod.startswith("fastapi")),
         }
 

@@ -131,7 +131,9 @@ class GraphStoreNodeUpserts(GraphStoreBase):
                 f.runtime_observed = $rt_obs,
                 f.runtime_observed_calls = $rt_calls,
                 f.runtime_observed_at = $rt_at,
-                f.runtime_observed_for_hash = $rt_for
+                f.runtime_observed_for_hash = $rt_for,
+                f.route_path = $route_path,
+                f.http_method = $http_method
             """,
             {
                 "id": fn.id, "name": fn.name, "qname": fn.qualified_name,
@@ -152,6 +154,8 @@ class GraphStoreNodeUpserts(GraphStoreBase):
                 "rt_calls": rt_calls,
                 "rt_at": rt_at,
                 "rt_for": rt_for,
+                "route_path": fn.route_path,
+                "http_method": fn.http_method,
             }
         )
 

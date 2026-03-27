@@ -272,6 +272,7 @@ def run_full_pipeline(config: RunConfig) -> dict:
         p05_calls, p05b_callbacks, p06_heritage, p07_variables, p08_types,
         p09_communities, p10_processes, p12_coupling,
     )
+    from repograph.pipeline.phases import p03b_framework_tags, p05c_http_calls
     from repograph.docs.staleness import StalenessTracker
     from repograph.pipeline.incremental import IncrementalDiff
     from repograph.pipeline.sync_state import clear_sync_lock, write_sync_lock
@@ -321,6 +322,9 @@ def run_full_pipeline(config: RunConfig) -> dict:
             parsed = p03_parse.run(files, store, symbol_table)
             progress.update(task3, description=f"Phase 3: Parsed {len(parsed)} files")
 
+            progress.add_task("Phase 3b: Applying framework tags...", total=None)
+            p03b_framework_tags.run(parsed, store)
+
             progress.add_task("Phase 4: Resolving imports...", total=None)
             p04_imports.run(parsed, store, symbol_table, config.repo_root)
 
@@ -329,6 +333,9 @@ def run_full_pipeline(config: RunConfig) -> dict:
 
             progress.add_task("Phase 5b: Detecting callback registrations...", total=None)
             p05b_callbacks.run(parsed, store, symbol_table)
+
+            progress.add_task("Phase 5c: Detecting HTTP call edges...", total=None)
+            p05c_http_calls.run(parsed, store)
 
             progress.add_task("Phase 6: Resolving inheritance...", total=None)
             p06_heritage.run(parsed, store, symbol_table)
@@ -434,6 +441,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
         p05_calls, p05b_callbacks, p06_heritage, p07_variables, p08_types,
         p09_communities, p10_processes,
     )
+    from repograph.pipeline.phases import p03b_framework_tags, p05c_http_calls
     from repograph.pipeline.sync_state import clear_sync_lock, write_sync_lock
     from repograph.pipeline.health import (
         build_health_failure_report, build_health_report, write_health_json,
@@ -548,9 +556,11 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
                     symbol_table.add_class_from_dict(cls_dict)
 
             parsed = p03_parse.run(reparse_files, store, symbol_table)
+            p03b_framework_tags.run(parsed, store)
             p04_imports.run(parsed, store, symbol_table, config.repo_root)
             p05_calls.run(parsed, store, symbol_table)
             p05b_callbacks.run(parsed, store, symbol_table)
+            p05c_http_calls.run(parsed, store)
             p06_heritage.run(parsed, store, symbol_table)
             p07_variables.run(parsed, store, reparse_paths=reparse_paths)
             p08_types.run(parsed, store, symbol_table)

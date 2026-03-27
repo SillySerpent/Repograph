@@ -27,6 +27,19 @@ from repograph.core.models import (
 from repograph.utils.hashing import hash_source_slice, hash_string
 
 
+# Single source of truth for route-like decorator suffixes and their HTTP methods.
+# Matches the framework adapter detection logic exactly.
+_ROUTE_DECORATOR_HTTP_METHODS: dict[str, str] = {
+    ".route": "",       # Flask @app.route — method from methods=[...] arg, default GET
+    ".get": "GET",
+    ".post": "POST",
+    ".put": "PUT",
+    ".patch": "PATCH",
+    ".delete": "DELETE",
+    ".websocket": "WEBSOCKET",
+}
+
+
 class PythonParser(BaseParser):
     language_name = "python"
 
@@ -156,12 +169,14 @@ class PythonParser(BaseParser):
         """Walk the tree, tracking class context for proper qualified names."""
         for child in node.children:
             if child.type in ("function_definition", "decorated_definition"):
-                func_node, decorators = self._unwrap_decorated(child, source)
+                func_node, decorators, http_method, route_path = self._unwrap_decorated(child, source)
                 if func_node and func_node.type == "function_definition":
                     fn = self._extract_function(
                         func_node, source, source_str, file_record,
                         class_prefix=class_prefix,
                         decorators=decorators,
+                        http_method=http_method,
+                        route_path=route_path,
                     )
                     if fn:
                         fn.is_method = bool(class_stack)
@@ -193,7 +208,7 @@ class PythonParser(BaseParser):
                             )
 
             elif child.type in ("class_definition", "decorated_definition"):
-                class_node, _ = self._unwrap_decorated(child, source)
+                class_node, _, _hm, _rp = self._unwrap_decorated(child, source)
                 if class_node and class_node.type == "class_definition":
                     name_node = class_node.child_by_field_name("name")
                     if name_node:
@@ -221,18 +236,77 @@ class PythonParser(BaseParser):
 
     def _unwrap_decorated(
         self, node: ts.Node, source: bytes
-    ) -> tuple[ts.Node | None, list[str]]:
-        """Unwrap a decorated_definition, returning (inner_node, decorator_list)."""
+    ) -> tuple[ts.Node | None, list[str], str, str]:
+        """Unwrap a decorated_definition.
+
+        Returns ``(inner_node, decorator_names, http_method, route_path)``
+        where ``decorator_names`` contains only the callable name (arguments
+        stripped), and ``http_method`` / ``route_path`` are populated when a
+        route-like decorator is detected.
+        """
         if node.type != "decorated_definition":
-            return node, []
+            return node, [], "", ""
         decorators: list[str] = []
         inner: ts.Node | None = None
+        http_method = ""
+        route_path = ""
         for child in node.children:
             if child.type == "decorator":
-                decorators.append(node_text(child, source).lstrip("@").strip())
+                dec_name, dec_http, dec_route = self._parse_decorator(child, source)
+                decorators.append(dec_name)
+                if dec_http or dec_route:
+                    http_method = dec_http
+                    route_path = dec_route
             elif child.type in ("function_definition", "class_definition"):
                 inner = child
-        return inner, decorators
+        return inner, decorators, http_method, route_path
+
+    def _parse_decorator(
+        self, decorator_node: ts.Node, source: bytes
+    ) -> tuple[str, str, str]:
+        """Parse a single decorator node.
+
+        Returns ``(name, http_method, route_path)`` where name is the callable
+        portion (e.g., ``router.get``), http_method and route_path are populated
+        for route-like decorators.
+        """
+        # Find the expression inside the decorator (after the '@')
+        for child in decorator_node.children:
+            if child.type == "@":
+                continue
+            if child.type == "call":
+                fn_node = child.child_by_field_name("function")
+                args_node = child.child_by_field_name("arguments")
+                name = node_text(fn_node, source) if fn_node else node_text(child, source)
+                http_method, route_path = self._extract_route_from_decorator_name_and_args(
+                    name, args_node, source
+                )
+                return name, http_method, route_path
+            else:
+                # Bare decorator (no call) — e.g., @login_required
+                return node_text(child, source), "", ""
+        return node_text(decorator_node, source).lstrip("@").strip(), "", ""
+
+    def _extract_route_from_decorator_name_and_args(
+        self, name: str, args_node: ts.Node | None, source: bytes
+    ) -> tuple[str, str]:
+        """Return (http_method, route_path) if name is a route-like decorator."""
+        http_method = ""
+        for suffix, method in _ROUTE_DECORATOR_HTTP_METHODS.items():
+            if name.endswith(suffix):
+                http_method = method
+                break
+        else:
+            return "", ""
+
+        route_path = ""
+        if args_node is not None:
+            for arg in args_node.children:
+                if arg.type in ("string", "concatenated_string"):
+                    raw = node_text(arg, source)
+                    route_path = raw.strip("\"'")
+                    break
+        return http_method, route_path
 
     def _extract_function(
         self,
@@ -242,6 +316,8 @@ class PythonParser(BaseParser):
         file_record: FileRecord,
         class_prefix: str = "",
         decorators: list[str] | None = None,
+        http_method: str = "",
+        route_path: str = "",
     ) -> FunctionNode | None:
         name_node = node.child_by_field_name("name")
         if not name_node:
@@ -305,6 +381,8 @@ class PythonParser(BaseParser):
             source_hash=src_hash,
             is_test=file_record.is_test,
             inline_imports=inline_imports,
+            http_method=http_method,
+            route_path=route_path,
         )
 
     def _extract_params(
@@ -347,7 +425,7 @@ class PythonParser(BaseParser):
         decorators: list[str] = []
         actual_node = node
         if node.type == "decorated_definition":
-            actual_node, decorators = self._unwrap_decorated(node, source)
+            actual_node, decorators, _, _rp = self._unwrap_decorated(node, source)
             if actual_node is None or actual_node.type != "class_definition":
                 return None
 
