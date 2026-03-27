@@ -51,17 +51,30 @@ def db_path(repo_root: str) -> str:
 
 
 def get_repo_root(path: str | None = None) -> str:
-    """Walk up from path (default: cwd) to find the repo root (.repograph dir)."""
-    start = os.path.abspath(path or os.getcwd())
+    """Walk up from *path* (default: cwd) to find the repo root (.repograph dir).
+
+    Raises :exc:`~repograph.exceptions.RepographNotFoundError` when no
+    ``.repograph`` directory is found anywhere in the directory tree.  Callers
+    that can sensibly operate without an index (e.g. ``repograph clean``) should
+    catch this exception explicitly and fall back to ``os.path.abspath(path or
+    os.getcwd())``.
+    """
+    from repograph.exceptions import RepographNotFoundError
+
+    start = os.path.realpath(os.path.abspath(path or os.getcwd()))
     current = start
+    seen: set[str] = set()
     while True:
+        if current in seen:
+            break
+        seen.add(current)
         if os.path.isdir(os.path.join(current, REPOGRAPH_DIR)):
             return current
         parent = os.path.dirname(current)
         if parent == current:
-            # Not found — return cwd
-            return start
+            break
         current = parent
+    raise RepographNotFoundError(start)
 
 
 def is_initialized(repo_root: str) -> bool:

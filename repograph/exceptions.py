@@ -1,9 +1,27 @@
 """User-facing exceptions for the public API and CLI.
 
-Currently :exc:`RepographDBLockedError` — raised when Kuzu cannot open ``graph.db``
+:exc:`RepographDBLockedError` — raised when Kuzu cannot open ``graph.db``
 because another process holds the writer lock (single-writer model). See
 ``docs/ACCURACY_CONTRACT.md`` (concurrency).
+
+:exc:`RepographNotFoundError` — raised when :func:`~repograph.config.get_repo_root`
+cannot find a ``.repograph`` directory walking up from the given path.
 """
+
+
+class RepographNotFoundError(FileNotFoundError):
+    """Raised when no ``.repograph`` directory is found walking up the directory tree.
+
+    Run ``repograph init`` first to create the index in the desired root.
+    """
+
+    def __init__(self, start: str) -> None:
+        self.start = start
+        msg = (
+            f"No .repograph directory found walking up from: {start}\n"
+            "Run 'repograph init' first to initialize the index."
+        )
+        super().__init__(msg)
 
 
 class RepographDBLockedError(RuntimeError):

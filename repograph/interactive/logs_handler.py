@@ -37,7 +37,12 @@ logs_app = typer.Typer(
 
 def _log_dir(repo_path: str | None) -> Path:
     from repograph.config import get_repo_root, repograph_dir
-    root = get_repo_root(repo_path)
+    from repograph.exceptions import RepographNotFoundError
+    try:
+        root = get_repo_root(repo_path)
+    except RepographNotFoundError:
+        # Return a path that won't exist — callers all check `if not log_dir.exists()`
+        root = os.path.abspath(repo_path or os.getcwd())
     return Path(repograph_dir(root)) / "logs"
 
 

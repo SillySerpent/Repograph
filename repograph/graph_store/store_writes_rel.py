@@ -16,6 +16,9 @@ from repograph.core.models import (
 )
 from repograph.graph_store.store_base import GraphStoreBase
 from repograph.graph_store.store_utils import _j, _ts, _hash_content
+from repograph.observability import get_logger
+
+_logger = get_logger(__name__, subsystem="graph_store")
 
 
 class GraphStoreRelWrites(GraphStoreBase):
@@ -164,7 +167,14 @@ class GraphStoreRelWrites(GraphStoreBase):
 
         try:
             extra_list = json.loads(raw) if raw else []
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as parse_exc:
+            _logger.warning(
+                "extra_site_lines JSON parse failed — falling back to empty list; "
+                "call-site history for this edge may be incomplete",
+                from_id=edge.from_function_id,
+                to_id=edge.to_function_id,
+                exc_msg=str(parse_exc),
+            )
             extra_list = []
         if not isinstance(extra_list, list):
             extra_list = []
@@ -178,6 +188,18 @@ class GraphStoreRelWrites(GraphStoreBase):
         new_primary = sorted_lines[0]
         others = [x for x in sorted_lines if x != new_primary]
         extra_json = self._esc(_j(others))
+
+        # INVARIANT: confidence must never decrease. Guard defensively before write.
+        if final_conf < existing_conf:
+            _logger.warning(
+                "confidence invariant violation detected — clamping to existing value",
+                from_id=edge.from_function_id,
+                to_id=edge.to_function_id,
+                existing_conf=existing_conf,
+                computed_final_conf=final_conf,
+            )
+            final_conf = existing_conf
+
         self._exec_rel(
             f"MATCH (a:Function {{id:'{fid}'}})-[r:CALLS]->(b:Function {{id:'{tid}'}}) "
             f"SET r.call_site_line={new_primary}, r.extra_site_lines='{extra_json}', "

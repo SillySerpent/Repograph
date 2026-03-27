@@ -60,9 +60,14 @@ def _cli_startup(ctx: typer.Context) -> None:
 def _get_root_and_store(repo_path: str | None = None):
     """Return (repo_root, store) for the current repo."""
     from repograph.config import get_repo_root, db_path, is_initialized
+    from repograph.exceptions import RepographNotFoundError
     from repograph.graph_store.store import GraphStore
 
-    root = get_repo_root(repo_path)
+    try:
+        root = get_repo_root(repo_path)
+    except RepographNotFoundError:
+        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        raise typer.Exit(1)
     if not is_initialized(root):
         console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
         raise typer.Exit(1)
@@ -76,8 +81,13 @@ def _get_service(path: str | None = None):
     """Return (repo_root, RepoGraph API wrapper) for initialized repos."""
     from repograph.api import RepoGraph
     from repograph.config import get_repo_root, repograph_dir, is_initialized
+    from repograph.exceptions import RepographNotFoundError
 
-    root = get_repo_root(path)
+    try:
+        root = get_repo_root(path)
+    except RepographNotFoundError:
+        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        raise typer.Exit(1)
     if not is_initialized(root):
         console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
         raise typer.Exit(1)
@@ -315,6 +325,7 @@ def test_command(
     new tests that match those selectors.
     """
     from repograph.config import get_repo_root
+    from repograph.exceptions import RepographNotFoundError
 
     catalog = _test_profiles_catalog()
     if list_profiles:
@@ -330,7 +341,10 @@ def test_command(
         console.print(t)
         return
 
-    root = get_repo_root(path)
+    try:
+        root = get_repo_root(path)
+    except RepographNotFoundError:
+        root = os.path.abspath(path or os.getcwd())
     try:
         profile_args = _test_profile_args(profile)
     except ValueError as exc:
@@ -1877,10 +1891,15 @@ def clean(
     from pathlib import Path
 
     from repograph.config import get_repo_root, repograph_dir
+    from repograph.exceptions import RepographNotFoundError
     from repograph.utils.dev_clean import clean_development_artifacts, summarize_removed
     import shutil
 
-    root = get_repo_root(path)
+    try:
+        root = get_repo_root(path)
+    except RepographNotFoundError:
+        # clean can run on un-initialized directories; just use the provided path
+        root = os.path.abspath(path or os.getcwd())
     root_path = Path(root)
     rg_dir = repograph_dir(root)
 
@@ -1957,10 +1976,15 @@ def trace_install(
     sys.settrace tracing and writes JSONL traces to .repograph/runtime/.
     """
     from repograph.config import get_repo_root, repograph_dir as rg_dir_fn
+    from repograph.exceptions import RepographNotFoundError
     from repograph.runtime.trace_format import trace_dir
     from repograph.plugins.lifecycle import get_hook_scheduler, ensure_all_plugins_registered
 
-    root = get_repo_root(path)
+    try:
+        root = get_repo_root(path)
+    except RepographNotFoundError:
+        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        raise typer.Exit(1)
     rg_dir = rg_dir_fn(root)
     td = trace_dir(rg_dir)
 
@@ -2011,9 +2035,14 @@ def trace_collect(
 ) -> None:
     """List trace files collected in .repograph/runtime/."""
     from repograph.config import get_repo_root, repograph_dir as rg_dir_fn
+    from repograph.exceptions import RepographNotFoundError
     from repograph.runtime.trace_format import collect_trace_files
 
-    root = get_repo_root(path)
+    try:
+        root = get_repo_root(path)
+    except RepographNotFoundError:
+        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        raise typer.Exit(1)
     rg_dir = rg_dir_fn(root)
 
     files = collect_trace_files(rg_dir)
@@ -2088,10 +2117,15 @@ def trace_report(
     """
     import json as _json
     from repograph.config import get_repo_root, repograph_dir as rg_dir_fn
+    from repograph.exceptions import RepographNotFoundError
     from repograph.runtime.trace_format import trace_dir, collect_trace_files
     from repograph.runtime.overlay import overlay_traces
 
-    root = get_repo_root(path)
+    try:
+        root = get_repo_root(path)
+    except RepographNotFoundError:
+        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        raise typer.Exit(1)
     rg_dir = rg_dir_fn(root)
     td = trace_dir(rg_dir)
 
@@ -2172,9 +2206,14 @@ def trace_clear(
     """Delete all collected trace files from .repograph/runtime/."""
     import shutil
     from repograph.config import get_repo_root, repograph_dir as rg_dir_fn
+    from repograph.exceptions import RepographNotFoundError
     from repograph.runtime.trace_format import trace_dir
 
-    root = get_repo_root(path)
+    try:
+        root = get_repo_root(path)
+    except RepographNotFoundError:
+        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        raise typer.Exit(1)
     td = trace_dir(rg_dir_fn(root))
 
     if not td.exists():
