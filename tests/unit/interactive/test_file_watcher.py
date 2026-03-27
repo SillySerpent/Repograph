@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from typing import Any, cast
 from unittest.mock import MagicMock, patch, call
 
 
@@ -44,8 +45,8 @@ def _patch_watchdog():
     watchdog_obs = types.ModuleType("watchdog.observers")
     watchdog_evt = types.ModuleType("watchdog.events")
 
-    watchdog_obs.Observer = _FakeObserver
-    watchdog_evt.FileSystemEventHandler = _FakeEventHandler
+    setattr(watchdog_obs, "Observer", _FakeObserver)
+    setattr(watchdog_evt, "FileSystemEventHandler", _FakeEventHandler)
 
     sys.modules.setdefault("watchdog", watchdog_pkg)
     sys.modules["watchdog.observers"] = watchdog_obs
@@ -130,8 +131,9 @@ def test_daemon_start_starts_observer(tmp_path):
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
     daemon.start()
 
-    assert daemon._observer is not None
-    assert daemon._observer.started, "Observer.start() must be called by daemon.start()"
+    observer = cast(Any, daemon._observer)
+    assert observer is not None
+    assert observer.started, "Observer.start() must be called by daemon.start()"
     daemon.stop()
 
 

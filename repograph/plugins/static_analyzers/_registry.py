@@ -5,11 +5,14 @@ under ``plugins/demand_analyzers/`` and register separately.
 """
 from __future__ import annotations
 
+import threading
+
 from repograph.core.plugin_framework import PluginRegistry, StaticAnalyzerPlugin
 from repograph.plugins.discovery import STATIC_ANALYZER_ORDER, iter_build_plugins
 
 _REGISTRY: PluginRegistry[StaticAnalyzerPlugin] = PluginRegistry("static_analyzer")
 _DEFAULTS_REGISTERED = False
+_DEFAULTS_LOCK = threading.Lock()
 
 
 def get_registry() -> PluginRegistry[StaticAnalyzerPlugin]:
@@ -25,9 +28,12 @@ def ensure_default_static_analyzers_registered() -> None:
     global _DEFAULTS_REGISTERED
     if _DEFAULTS_REGISTERED:
         return
-    for build in iter_build_plugins(
-        "repograph.plugins.static_analyzers",
-        STATIC_ANALYZER_ORDER,
-    ):
-        register_static_analyzer(build())
-    _DEFAULTS_REGISTERED = True
+    with _DEFAULTS_LOCK:
+        if _DEFAULTS_REGISTERED:
+            return
+        for build in iter_build_plugins(
+            "repograph.plugins.static_analyzers",
+            STATIC_ANALYZER_ORDER,
+        ):
+            register_static_analyzer(build())
+        _DEFAULTS_REGISTERED = True

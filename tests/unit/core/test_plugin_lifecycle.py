@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 
 # ---------------------------------------------------------------------------
@@ -119,3 +120,63 @@ def test_get_hook_scheduler_returns_fully_bootstrapped_scheduler():
     # Parsers register for on_file_parsed; check at least one is present
     parsers = sched.list_for_hook("on_file_parsed", kind="parser")
     assert len(parsers) > 0, "No parsers registered after get_hook_scheduler()"
+
+
+def test_concurrent_bootstrap_then_manifest_reads_are_stable():
+    """Concurrent bootstrap must leave parser manifests stable."""
+    _reset()
+    from repograph.plugins.lifecycle import get_hook_scheduler
+    from repograph.plugins.parsers import registry as parser_registry
+
+    def worker() -> None:
+        get_hook_scheduler()
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = [ex.submit(worker) for _ in range(16)]
+        for future in futures:
+            future.result(timeout=10)
+
+    ids_first = sorted(parser_registry.get_registry().ids())
+    ids_second = sorted(parser_registry.get_registry().ids())
+    assert ids_first == ids_second
+    assert ids_first, "Expected at least one parser plugin to be registered"
+
+
+def test_get_hook_scheduler_then_ensure_all_plugins_registered_no_duplicates():
+    """ensure_all_plugins_registered after scheduler bootstrap must be a no-op."""
+    _reset()
+    from repograph.plugins.lifecycle import ensure_all_plugins_registered, get_hook_scheduler
+    from repograph.plugins.parsers import registry as parser_registry
+
+    get_hook_scheduler()
+    before = sorted(parser_registry.get_registry().ids())
+    ensure_all_plugins_registered()
+    after = sorted(parser_registry.get_registry().ids())
+
+    assert before == after
+
+
+def test_reset_then_parallel_get_hook_scheduler_still_singleton():
+    """After reset, concurrent initialization must still produce one scheduler."""
+    _reset()
+    from repograph.plugins.lifecycle import get_hook_scheduler, reset_hook_scheduler
+
+    get_hook_scheduler()
+    reset_hook_scheduler()
+    results: list = []
+    errors: list[Exception] = []
+
+    def worker() -> None:
+        try:
+            results.append(get_hook_scheduler())
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futures = [ex.submit(worker) for _ in range(12)]
+        for future in futures:
+            future.result(timeout=10)
+
+    assert not errors
+    assert results
+    assert all(r is results[0] for r in results)

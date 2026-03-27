@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from repograph.core.models import FileRecord, ParsedFile
 from repograph.core.plugin_framework import ParserPlugin, PluginManifest, PluginRegistry
 from repograph.plugins.discovery import PARSER_ORDER, iter_build_plugins
@@ -9,6 +11,7 @@ from repograph.plugins.parsers.base import ParserAdapter
 _PARSER_REGISTRY: PluginRegistry[ParserPlugin] = PluginRegistry("parser")
 _LANGUAGE_TO_PLUGIN: dict[str, str] = {}
 _DEFAULTS_REGISTERED = False
+_DEFAULTS_LOCK = threading.Lock()
 
 
 def get_registry() -> PluginRegistry[ParserPlugin]:
@@ -71,11 +74,13 @@ def ensure_default_parsers_registered() -> None:
     global _DEFAULTS_REGISTERED
     if _DEFAULTS_REGISTERED:
         return
-
-    for build in iter_build_plugins(
-        "repograph.plugins.parsers",
-        PARSER_ORDER,
-        skip_import_error=True,
-    ):
-        register_parser(build())
-    _DEFAULTS_REGISTERED = True
+    with _DEFAULTS_LOCK:
+        if _DEFAULTS_REGISTERED:
+            return
+        for build in iter_build_plugins(
+            "repograph.plugins.parsers",
+            PARSER_ORDER,
+            skip_import_error=True,
+        ):
+            register_parser(build())
+        _DEFAULTS_REGISTERED = True

@@ -91,7 +91,9 @@ class ClassRoleAnalyzerPlugin(StaticAnalyzerPlugin):
             service = kwargs.get("service")
             if service is None:
                 return []
-            store = service._store  # type: ignore[attr-defined]
+            store = getattr(service, "_store", None)
+            if not isinstance(store, GraphStore):
+                return []
 
         return run_class_role_analysis(store)
 

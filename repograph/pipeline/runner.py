@@ -41,6 +41,7 @@ import sys
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from rich.console import Console
@@ -138,18 +139,19 @@ def _get_function_ids_in_paths(store: GraphStore, file_paths: set[str]) -> set[s
 
 def _run_phases_parallel(
     config: RunConfig,
-    parsed: list,
+    parsed: list[ParsedFile],
     store: GraphStore,
-    symbol_table: object,
+    symbol_table: SymbolTable,
     *,
     include_git: bool = False,
-    reparse_paths: set | None = None,
+    reparse_paths: set[str] | None = None,
 ) -> None:
-    """Run phases p04-p08 (+ p05c, p06b, optionally p12) in a thread pool.
+    """Run dependency-ordered mid-pipeline phases with parallel waves.
 
-    Each phase is independent: it only reads immutable data produced by p03
-    (ParsedFile list, SymbolTable) and writes a different subset of relationship
-    types to the graph store.  KuzuDB serialises concurrent DB writes internally.
+    p05 call resolution depends on p04 import resolution (resolved_path and
+    cross-lang import edges). To preserve correctness, p04 must complete first.
+    Remaining phases then run in parallel because they read immutable p03 data
+    and write disjoint relationship families.
 
     Failures in individual phases are handled according to ``config.strict`` and
     ``config.continue_on_error``; they never silently discard work.
@@ -161,8 +163,14 @@ def _run_phases_parallel(
         p06_heritage, p06b_layer_classify, p07_variables, p08_types,
     )
 
-    phase_tasks: dict[str, object] = {
-        "p04_imports":   lambda: p04_imports.run(parsed, store, symbol_table, config.repo_root),
+    # Dependency barrier: p04 must finish before p05.
+    try:
+        p04_imports.run(parsed, store, symbol_table, config.repo_root)
+    except BaseException as exc:
+        _handle_optional_phase_failure(config, "phase p04_imports", exc)
+        return
+
+    phase_tasks: dict[str, Callable[[], object]] = {
         "p05_calls":     lambda: p05_calls.run(parsed, store, symbol_table),
         "p05b_callbacks": lambda: p05b_callbacks.run(parsed, store, symbol_table),
         "p05c_http":     lambda: p05c_http_calls.run(parsed, store),
@@ -226,6 +234,13 @@ def _handle_optional_phase_failure(config: RunConfig, phase: str, exc: BaseExcep
             f"{phase} failed; pass --continue-on-error to tolerate optional errors: {exc}"
         ) from exc
     console.print(f"[yellow]Warning: {phase} failed: {exc}[/]")
+
+
+def _ensure_scheduler_bootstrapped() -> None:
+    """Bootstrap plugin scheduler on the main thread before parallel parse."""
+    from repograph.plugins.lifecycle import get_hook_scheduler
+
+    get_hook_scheduler()
 
 
 def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) -> dict[str, object]:
@@ -374,6 +389,7 @@ def run_full_pipeline(config: RunConfig) -> dict:
         store.initialize_schema()
 
         symbol_table = SymbolTable()
+        _ensure_scheduler_bootstrapped()
 
         with Progress(
             SpinnerColumn(),
@@ -613,6 +629,7 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
                 if cls_dict["file_path"] not in reparse_paths:
                     symbol_table.add_class_from_dict(cls_dict)
 
+            _ensure_scheduler_bootstrapped()
             parsed = p03_parse.run(reparse_files, store, symbol_table)
             p03b_framework_tags.run(parsed, store)
             _run_phases_parallel(
