@@ -163,12 +163,13 @@ def _run_phases_parallel(
         p06_heritage, p06b_layer_classify, p07_variables, p08_types,
     )
 
-    # Dependency barrier: p04 must finish before p05.
+    # Dependency barrier: p04 must finish before p05 for best correctness.
+    # In continue-on-error mode we still run the remaining phases so callers can
+    # collect partial outputs while seeing the explicit p04 failure warning.
     try:
         p04_imports.run(parsed, store, symbol_table, config.repo_root)
     except BaseException as exc:
         _handle_optional_phase_failure(config, "phase p04_imports", exc)
-        return
 
     phase_tasks: dict[str, Callable[[], object]] = {
         "p05_calls":     lambda: p05_calls.run(parsed, store, symbol_table),

@@ -16,7 +16,8 @@ def self_rg(tmp_path_factory):
     shutil.copytree(
         REPOGRAPH_SRC,
         repo,
-        ignore=shutil.ignore_patterns(".repograph", "__pycache__", "*.egg-info"),
+        ignore=shutil.ignore_patterns(".repograph", "__pycache__", "*.egg-info", "MagicMock"),
+        ignore_dangling_symlinks=True,
     )
     rg_dir = os.path.join(repo, ".repograph")
     from repograph.pipeline.runner import RunConfig, run_full_pipeline
