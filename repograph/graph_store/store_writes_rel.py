@@ -362,3 +362,53 @@ class GraphStoreRelWrites(GraphStoreBase):
             f"MERGE (a)-[r:COUPLED_WITH]->(b) "
             f"SET r.change_count={edge.change_count}, r.strength={edge.strength}"
         )
+
+    def update_function_layer_role(
+        self,
+        fn_id: str,
+        layer: str,
+        role: str = "",
+        http_method: str = "",
+        route_path: str = "",
+    ) -> None:
+        """Set layer/role/http classification fields on a Function node (schema v1.6)."""
+        fid = self._esc(fn_id)
+        l_e = self._esc(layer)
+        r_e = self._esc(role)
+        hm_e = self._esc(http_method)
+        rp_e = self._esc(route_path)
+        try:
+            self._require_conn().execute(
+                f"MATCH (f:Function {{id:'{fid}'}}) "
+                f"SET f.layer='{l_e}', f.role='{r_e}', "
+                f"f.http_method='{hm_e}', f.route_path='{rp_e}'"
+            )
+        except Exception as exc:
+            _logger.warning(
+                "update_function_layer_role failed",
+                fn_id=fn_id,
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
+
+    def insert_makes_http_call_edge(
+        self,
+        from_id: str,
+        to_id: str,
+        http_method: str,
+        url_pattern: str,
+        confidence: float,
+        reason: str,
+    ) -> None:
+        """Insert a MAKES_HTTP_CALL edge (schema v1.6) from a Python caller to an HTTP handler."""
+        fid = self._esc(from_id)
+        tid = self._esc(to_id)
+        hm_e = self._esc(http_method)
+        up_e = self._esc(url_pattern)
+        rs_e = self._esc(reason)
+        self._exec_rel(
+            f"MATCH (a:Function {{id:'{fid}'}}),(b:Function {{id:'{tid}'}}) "
+            f"MERGE (a)-[r:MAKES_HTTP_CALL]->(b) "
+            f"SET r.http_method='{hm_e}', r.url_pattern='{up_e}', "
+            f"r.confidence={confidence}, r.reason='{rs_e}'"
+        )

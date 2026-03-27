@@ -73,6 +73,25 @@ def run(
     _process_html_script_tags(parsed_files, store, path_index)
 
 
+def _build_reexport_index(
+    parsed_files: list[ParsedFile],
+) -> dict[str, dict[str, list[str]]]:
+    """Build a reverse re-export map: file_path -> {symbol -> [source_paths]}.
+
+    Allows O(1) lookup during inline-import resolution instead of O(files*imports)
+    per-call scanning.  Populated once before the main inline-import loop.
+    """
+    index: dict[str, dict[str, list[str]]] = {}
+    for pf in parsed_files:
+        for imp in pf.imports:
+            if not imp.resolved_path or not imp.imported_names:
+                continue
+            file_map = index.setdefault(pf.file_record.path, {})
+            for sym in imp.imported_names:
+                file_map.setdefault(sym, []).append(imp.resolved_path)
+    return index
+
+
 def _process_inline_import_call_edges(
     parsed_files: list[ParsedFile],
     store: GraphStore,
@@ -86,14 +105,17 @@ def _process_inline_import_call_edges(
     1. Direct lookup: symbol defined in the resolved module file itself.
     2. Re-export fallback: the resolved module re-exports the symbol via its own
        imports (e.g. ``store.py`` re-exports ``_delete_db_dir`` from
-       ``store_utils.py``).  We follow one level of re-export by checking every
-       import in the resolved file that names the symbol.
+       ``store_utils.py``).  We follow one level of re-export using a pre-built
+       index (O(1) lookup per symbol instead of O(files*imports) scanning).
     3. Global-name fallback: look up the bare name across the whole symbol table
        (lowest confidence; only used when both above fail).
 
     INVARIANT: Only writes CALLS edges — never modifies ParsedFile or SymbolTable.
     NEVER creates duplicate edges; deduplication key is (caller_id, callee_id, line).
     """
+    # Build re-export index once: file_path -> {symbol -> [source_paths]}
+    reexport_index = _build_reexport_index(parsed_files)
+
     created: set[tuple[str, str, int]] = set()
     for pf in parsed_files:
         if pf.file_record.language != "python":
@@ -115,18 +137,10 @@ def _process_inline_import_call_edges(
                 # Strategy 2: resolved file re-exports the symbol (one hop).
                 # e.g. store.py does ``from store_utils import _delete_db_dir``
                 # so the symbol lives in store_utils.py, not store.py.
+                # O(1) lookup via the pre-built reexport_index.
                 if not entries:
-                    reexport_imports = [
-                        imp for pf2 in parsed_files
-                        for imp in pf2.imports
-                        if pf2.file_record.path == resolved
-                        and sym_name in imp.imported_names
-                        and imp.resolved_path
-                    ]
-                    for reimp in reexport_imports:
-                        rp = reimp.resolved_path
-                        if not rp:
-                            continue
+                    source_paths = reexport_index.get(resolved, {}).get(sym_name, [])
+                    for rp in source_paths:
                         found = [
                             e for e in symbol_table.lookup_in_file(rp, sym_name)
                             if e.node_type == "function"

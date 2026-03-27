@@ -3,7 +3,7 @@
 All CREATE TABLE statements for RepoGraph's node and edge tables.
 """
 
-SCHEMA_VERSION = "1.4"
+SCHEMA_VERSION = "1.6"
 
 # ---------------------------------------------------------------------------
 # Node table DDL
@@ -23,6 +23,7 @@ CREATE NODE TABLE IF NOT EXISTS File (
     is_test    BOOLEAN,
     is_config  BOOLEAN,
     indexed_at STRING,
+    layer      STRING,
     PRIMARY KEY (id)
 )
 """
@@ -73,6 +74,10 @@ CREATE NODE TABLE IF NOT EXISTS Function (
     runtime_observed_calls    INT64,
     runtime_observed_at       STRING,
     runtime_observed_for_hash STRING,
+    layer      STRING,
+    role       STRING,
+    http_method STRING,
+    route_path  STRING,
     PRIMARY KEY (id)
 )
 """
@@ -318,6 +323,16 @@ CREATE REL TABLE IF NOT EXISTS COUPLED_WITH (
 )
 """
 
+CREATE_REL_MAKES_HTTP_CALL = """
+CREATE REL TABLE IF NOT EXISTS MAKES_HTTP_CALL (
+    FROM Function TO Function,
+    http_method  STRING,
+    url_pattern  STRING,
+    confidence   DOUBLE,
+    reason       STRING
+)
+"""
+
 # ---------------------------------------------------------------------------
 # Ordered list for initialization
 # ---------------------------------------------------------------------------
@@ -353,4 +368,5 @@ ALL_REL_TABLES = [
     CREATE_REL_VAR_IN_PATHWAY,
     CREATE_REL_STEP_IN_PROCESS,
     CREATE_REL_COUPLED_WITH,
+    CREATE_REL_MAKES_HTTP_CALL,
 ]

@@ -59,6 +59,7 @@ class GraphStoreBase(ObservableMixin):
         self._migrate_function_is_test_column()
         self._migrate_function_entry_score_details()
         self._migrate_function_runtime_overlay_columns()
+        self._migrate_layer_role_http_columns()
         self._initialized = True
         self._calls_extra_lines = self._probe_calls_extra_lines_column()
 
@@ -103,6 +104,28 @@ class GraphStoreBase(ObservableMixin):
                 self._require_conn().execute(ddl)
             except Exception:
                 _logger.debug("migration v1.4: runtime_overlay column already exists — skipping", ddl=ddl)
+
+    def _migrate_layer_role_http_columns(self) -> None:
+        """schema v1.6 — Add layer/role/http classification fields.
+
+        Adds ``layer``, ``role``, ``http_method``, ``route_path`` to Function
+        and ``layer`` to File.  These are populated by Block F/G (framework
+        adapter tags and layer classification phase).  On fresh databases the
+        DDL in schema.py already includes these columns; this migration handles
+        existing databases.
+        """
+        migrations = [
+            "ALTER TABLE Function ADD layer STRING DEFAULT ''",
+            "ALTER TABLE Function ADD role STRING DEFAULT ''",
+            "ALTER TABLE Function ADD http_method STRING DEFAULT ''",
+            "ALTER TABLE Function ADD route_path STRING DEFAULT ''",
+            "ALTER TABLE File ADD layer STRING DEFAULT ''",
+        ]
+        for ddl in migrations:
+            try:
+                self._require_conn().execute(ddl)
+            except Exception:
+                _logger.debug("migration v1.6: column already exists — skipping", ddl=ddl)
 
     def _probe_calls_extra_lines_column(self) -> bool:
         """True when CALLS.extra_site_lines exists (schema >= 1.1)."""

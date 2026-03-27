@@ -191,6 +191,55 @@ class GraphStoreAnalytics(GraphStoreBase):
         )
         return [r[0] for r in rows]
 
+    def get_bulk_importers(self, file_paths: list[str]) -> list[str]:
+        """Return paths of all files that import any of the given files (single query).
+
+        Replaces N calls to :meth:`get_importers` with one bulk ``IN`` query.
+        """
+        if not file_paths:
+            return []
+        rows = self.query(
+            "MATCH (importer:File)-[:IMPORTS]->(f:File) WHERE f.path IN $paths RETURN DISTINCT importer.path",
+            {"paths": file_paths},
+        )
+        return [r[0] for r in rows if r[0]]
+
+    def get_functions_by_layer(self, layer: str) -> list[dict]:
+        """Return all Function nodes with the given ``layer`` value (schema v1.6)."""
+        try:
+            rows = self.query(
+                "MATCH (f:Function) WHERE f.layer = $layer "
+                "RETURN f.id, f.qualified_name, f.file_path, f.layer, f.role, "
+                "f.http_method, f.route_path",
+                {"layer": layer},
+            )
+        except Exception:
+            return []
+        return [
+            {
+                "id": r[0], "qualified_name": r[1], "file_path": r[2],
+                "layer": r[3], "role": r[4], "http_method": r[5], "route_path": r[6],
+            }
+            for r in rows
+        ]
+
+    def get_http_endpoints(self) -> list[dict]:
+        """Return all Function nodes that are HTTP endpoints (non-empty http_method, schema v1.6)."""
+        try:
+            rows = self.query(
+                "MATCH (f:Function) WHERE f.http_method <> '' AND f.http_method IS NOT NULL "
+                "RETURN f.id, f.qualified_name, f.file_path, f.http_method, f.route_path, f.layer"
+            )
+        except Exception:
+            return []
+        return [
+            {
+                "id": r[0], "qualified_name": r[1], "file_path": r[2],
+                "http_method": r[3], "route_path": r[4], "layer": r[5],
+            }
+            for r in rows
+        ]
+
     def get_all_functions(self) -> list[dict]:
         rows = self.query(
             """

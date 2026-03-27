@@ -51,25 +51,27 @@ class GraphStoreNodeUpserts(GraphStoreBase):
         )
 
     def preload_runtime_overlay_for_file_paths(self, file_paths: list[str]) -> None:
-        """Bulk-load runtime overlay columns for existing Functions in ``file_paths`` (O1).
+        """Bulk-load runtime overlay columns for existing Functions in ``file_paths``.
 
-        Call at the start of parse phase; pair with :meth:`clear_runtime_overlay_prefetch`.
+        Uses a single ``WHERE f.file_path IN $fps`` query instead of N per-file
+        queries.  Call at the start of parse phase; pair with
+        :meth:`clear_runtime_overlay_prefetch`.
         """
         self._runtime_overlay_prefetch = {}
         if not file_paths:
             return
-        for fp in file_paths:
-            try:
-                rows = self.query(
-                    "MATCH (f:Function) WHERE f.file_path = $fp RETURN f.id, "
-                    "f.runtime_observed_for_hash, f.runtime_observed, "
-                    "f.runtime_observed_calls, f.runtime_observed_at",
-                    {"fp": fp},
-                )
-            except Exception:
-                continue
+        try:
+            rows = self.query(
+                "MATCH (f:Function) WHERE f.file_path IN $fps RETURN f.id, "
+                "f.runtime_observed_for_hash, f.runtime_observed, "
+                "f.runtime_observed_calls, f.runtime_observed_at",
+                {"fps": file_paths},
+            )
             for r in rows:
                 self._runtime_overlay_prefetch[r[0]] = (r[1], r[2], r[3], r[4])
+        except Exception:
+            # Prefetch is an optimisation — fall back to per-function queries in upsert_function
+            self._runtime_overlay_prefetch = {}
 
     def clear_runtime_overlay_prefetch(self) -> None:
         self._runtime_overlay_prefetch = None
