@@ -1890,7 +1890,11 @@ def watch(
     no_git: bool = typer.Option(False, "--no-git"),
     strict: bool = typer.Option(False, "--strict", help="Same as sync --strict for incremental rebuilds."),
 ):
-    """Watch mode: re-sync on file changes (debounced 200 ms)."""
+    """Watch mode: re-sync on file changes (debounced 200 ms).
+
+    Only one incremental sync runs at a time; further edits queue a single
+    follow-up sync after the current run finishes.
+    """
     from repograph.config import repograph_dir
     from repograph.pipeline.runner import RunConfig
     from repograph.interactive.watch import FileWatcherDaemon

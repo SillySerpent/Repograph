@@ -269,3 +269,117 @@ def test_watchdog_missing_raises_import_error(tmp_path):
             sys.modules[key] = val
         # Reload the watch module with real (fake) stubs
         sys.modules.pop("repograph.interactive.watch", None)
+
+
+# ---------------------------------------------------------------------------
+# I2.5 single-flight: no overlapping sync; coalesced follow-up
+# ---------------------------------------------------------------------------
+
+
+def test_single_flight_second_debounced_fire_does_not_reenter_sync(tmp_path):
+    """While a sync runs, another debounced fire only sets pending — no re-entry."""
+    _patch_watchdog()
+
+    from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
+
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
+    daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
+
+    started = threading.Event()
+    release = threading.Event()
+    depth_lock = threading.Lock()
+    active = [0]
+    max_active = [0]
+
+    def _fake_sync():
+        with depth_lock:
+            active[0] += 1
+            max_active[0] = max(max_active[0], active[0])
+            assert active[0] <= 1
+        started.set()
+        assert release.wait(timeout=5)
+        with depth_lock:
+            active[0] -= 1
+
+    daemon._run_sync = _fake_sync
+
+    t1 = threading.Thread(target=daemon._debounced_fire, daemon=True)
+    t1.start()
+    assert started.wait(timeout=5)
+    daemon._debounced_fire()
+    release.set()
+    t1.join(timeout=5)
+    time.sleep(_DEBOUNCE_SECS + 0.2)
+
+    assert max_active[0] <= 1, "sync must not be re-entered concurrently"
+    assert active[0] == 0
+    assert daemon._pending_resync is False
+
+
+def test_pending_resync_coalesces_to_one_follow_up_sync(tmp_path):
+    """Multiple debounced fires during one sync yield exactly one follow-up run."""
+    _patch_watchdog()
+
+    from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
+
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
+    daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
+
+    started = threading.Event()
+    release = threading.Event()
+    sync_count = [0]
+
+    def _fake_sync():
+        sync_count[0] += 1
+        if sync_count[0] == 1:
+            started.set()
+            assert release.wait(timeout=5)
+
+    daemon._run_sync = _fake_sync
+
+    t1 = threading.Thread(target=daemon._debounced_fire, daemon=True)
+    t1.start()
+    assert started.wait(timeout=5)
+    daemon._debounced_fire()
+    daemon._debounced_fire()
+    daemon._debounced_fire()
+    release.set()
+    t1.join(timeout=5)
+    time.sleep(_DEBOUNCE_SECS + 0.2)
+
+    assert sync_count[0] == 2
+
+
+def test_stop_suppresses_follow_up_schedule(tmp_path):
+    """After stop(), completing an in-flight sync must not schedule another debounce."""
+    _patch_watchdog()
+
+    from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
+
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
+    daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
+
+    started = threading.Event()
+    release = threading.Event()
+    sync_count = [0]
+
+    def _fake_sync():
+        sync_count[0] += 1
+        started.set()
+        release.wait(timeout=5)
+
+    daemon._run_sync = _fake_sync
+
+    t1 = threading.Thread(target=daemon._debounced_fire, daemon=True)
+    t1.start()
+    assert started.wait(timeout=5)
+    daemon._debounced_fire()
+    daemon.stop()
+    release.set()
+    t1.join(timeout=5)
+    time.sleep(_DEBOUNCE_SECS + 0.25)
+
+    assert sync_count[0] == 1
