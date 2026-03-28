@@ -39,8 +39,31 @@ Use **`repograph trace collect`** (not `collection`). `trace install` sets up in
 | `trace_variable` | `trace_variable(variable_name)` |
 | `get_entry_points` | `entry_points(limit=limit)` |
 | `get_dead_code` | `dead_code()` with service default tier |
+| `list_log_sessions` | `list_log_sessions()` |
+| `get_errors` | `get_recent_errors(run_id)` |
+| `get_log_subsystem` | `get_log_session(run_id, subsystem)` |
+| `query_graph` | NL→Cypher translation via Anthropic API (requires `anthropic` + `ANTHROPIC_API_KEY`) |
 
 Resources: `repograph://overview`, `.../pathways`, `.../communities`, `.../schema`.
+
+### `query_graph` — natural language queries (Block I5)
+
+Translates a plain-English question about the codebase into a KuzuDB Cypher query and returns results:
+
+```python
+result = mcp.query_graph("Which API functions are not covered by tests?")
+# {
+#   "question": "...",
+#   "cypher": "MATCH (f:Function) WHERE f.layer = 'api' AND f.is_covered = false RETURN ...",
+#   "explanation": "Returns uncovered API layer functions",
+#   "rows": [...],
+#   "row_count": 12,
+#   "truncated": false,
+#   "error": null
+# }
+```
+
+The generated Cypher is always read-only — queries containing `CREATE`, `SET`, `DELETE`, `MERGE`, or `DETACH` are refused before execution. Model defaults to `claude-haiku-4-5-20251001`; override with `REPOGRAPH_NL_MODEL` env var.
 
 ---
 

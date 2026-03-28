@@ -137,6 +137,29 @@ def create_server(service: RepoGraphService, *, port: int | None = None):
         _logger.info("mcp tool: get_log_subsystem", subsystem=subsystem, run_id=run_id or "latest")
         return service.get_log_session(run_id=run_id or None, subsystem=subsystem)
 
+    # ── Natural language query (Block I5) ───────────────────────────────────
+
+    @mcp.tool()
+    def query_graph(question: str, model: str = "") -> dict:
+        """Translate a plain-English question about the codebase into Cypher and return results.
+
+        Requires the ``anthropic`` package and a valid ``ANTHROPIC_API_KEY`` env var.
+        The query is always read-only — write operations are refused before execution.
+
+        Parameters
+        ----------
+        question:
+            Natural-language question about the codebase, e.g.
+            "Which API layer functions have never been covered by tests?"
+        model:
+            Optional Anthropic model override. Leave empty to use the default
+            (``REPOGRAPH_NL_MODEL`` env var, or claude-haiku-4-5-20251001).
+        """
+        from repograph.mcp.nl_query import NLQueryEngine
+        _logger.info("mcp tool: query_graph", question_len=len(question))
+        engine = NLQueryEngine(service, model=model or None)
+        return engine.query(question)
+
     # ── Schema / registry resources ─────────────────────────────────────────
 
     @mcp.resource("repograph://schema")

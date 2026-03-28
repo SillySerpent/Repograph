@@ -15,6 +15,29 @@ import os
 
 from repograph.observability import get_logger
 
+__all__ = [
+    # Constants
+    "REPOGRAPH_DIR",
+    "INDEX_CONFIG_FILENAME",
+    "DB_FILENAME",
+    "DEFAULT_CONTEXT_TOKENS",
+    "DEFAULT_GIT_DAYS",
+    "DEFAULT_ENTRY_POINT_LIMIT",
+    "DEFAULT_MIN_COMMUNITY_SIZE",
+    "DEFAULT_MODULE_EXPANSION_THRESHOLD",
+    "ERROR_TRUNCATION_CHARS",
+    "AGENT_GUIDE_MAX_FILE_READ_BYTES",
+    "PREFETCH_CHUNK_SIZE",
+    "LANGUAGE_EXTENSIONS",
+    # Functions
+    "repograph_dir",
+    "db_path",
+    "get_repo_root",
+    "is_initialized",
+    "load_extra_exclude_dirs",
+    "load_doc_symbol_options",
+]
+
 _logger = get_logger(__name__, subsystem="config")
 
 REPOGRAPH_DIR = ".repograph"
