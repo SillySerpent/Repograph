@@ -61,6 +61,10 @@ class GraphStoreBase(ObservableMixin):
         self._migrate_function_runtime_overlay_columns()
         self._migrate_layer_role_http_columns()
         self._migrate_coverage_columns()
+        # NOTE: KuzuDB 0.11.x does not support CREATE INDEX DDL for secondary/hash
+        # indexes on node properties (Block D2).  KuzuDB's columnar scan already
+        # applies predicate pushdown on WHERE file_path = $x queries, so no explicit
+        # index DDL is needed or possible.  See docs/SCHEMA_CHANGES.md v1.5.
         self._initialized = True
         self._calls_extra_lines = self._probe_calls_extra_lines_column()
 

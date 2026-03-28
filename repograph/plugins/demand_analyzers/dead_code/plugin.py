@@ -3,7 +3,10 @@ from __future__ import annotations
 from repograph.core.plugin_framework import DemandAnalyzerPlugin, PluginManifest
 
 
-class DeadCodeAnalyzerPlugin(DemandAnalyzerPlugin):
+# NOTE: canonical definition — demand-side wrapper that delegates to RepoGraphService.dead_code().
+# Distinct from static_analyzers/dead_code/plugin.py::DeadCodeAnalyzerPlugin (StaticAnalyzerPlugin,
+# fires on_graph_built and performs the actual detection logic).
+class DeadCodeDemandPlugin(DemandAnalyzerPlugin):
     manifest = PluginManifest(
         id="demand_analyzer.dead_code",
         name="Dead code analyzer",
@@ -19,9 +22,9 @@ class DeadCodeAnalyzerPlugin(DemandAnalyzerPlugin):
         service = kwargs.get("service")
         min_tier = kwargs.get("min_tier", "possibly_dead")
         if service is None:
-            raise ValueError("DeadCodeAnalyzerPlugin requires service=")
+            raise ValueError("DeadCodeDemandPlugin requires service=")
         return service.dead_code(min_tier=min_tier)
 
 
-def build_plugin() -> DeadCodeAnalyzerPlugin:
-    return DeadCodeAnalyzerPlugin()
+def build_plugin() -> DeadCodeDemandPlugin:
+    return DeadCodeDemandPlugin()

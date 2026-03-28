@@ -432,6 +432,11 @@ def _is_subclass_method(fn: dict, subclass_class_names: set[str]) -> bool:
 # ---------------------------------------------------------------------------
 
 def _get_script_global_files(store: GraphStore) -> set[str]:
+    """Return file paths containing functions marked is_script_global=True.
+
+    NOTE: canonical definition — queries the is_script_global flag on Function nodes.
+    Distinct from p05_calls._get_html_script_tag_js_files which queries IMPORTS edges.
+    """
     try:
         rows = store.query(
             "MATCH (f:Function {is_script_global: true}) RETURN DISTINCT f.file_path"

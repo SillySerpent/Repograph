@@ -12,6 +12,18 @@
 
 ---
 
+## Schema version 1.5 — secondary indexes (Block D2, not added)
+
+Secondary `file_path` indexes were investigated but are not applicable to KuzuDB 0.11.x:
+
+- KuzuDB does not support `CREATE INDEX` DDL for secondary/hash indexes on node properties.
+- Only FTS and vector indexes exist (`CALL CREATE_FTS_INDEX` / `CREATE_VECTOR_INDEX`), which serve full-text and approximate-nearest-neighbor use cases, not equality lookups.
+- KuzuDB's columnar storage applies predicate pushdown on `WHERE file_path = $x` queries natively via its scan operators — no explicit index DDL is needed or possible.
+
+No schema change was made for v1.5. The version number is reserved. See `initialize_schema()` inline comment.
+
+---
+
 ## Schema version 1.4
 
 ### Runtime overlay columns (`Function`)

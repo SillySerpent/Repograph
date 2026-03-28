@@ -3,7 +3,7 @@
 All CREATE TABLE statements for RepoGraph's node and edge tables.
 """
 
-SCHEMA_VERSION = "1.6"
+SCHEMA_VERSION = "1.7"
 
 # ---------------------------------------------------------------------------
 # Node table DDL

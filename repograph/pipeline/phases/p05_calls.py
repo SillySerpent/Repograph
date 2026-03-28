@@ -53,7 +53,7 @@ def run(
     # any co-loaded file — even though there is no explicit import statement.
     # We pre-compute a set of these files and a reverse lookup so the call
     # resolver can check the shared scope before falling back to fuzzy global.
-    script_global_files = _get_script_global_files(store)
+    script_global_files = _get_html_script_tag_js_files(store)
     # name -> list[SymbolEntry] across all script-global files
     script_global_scope: dict[str, list] = {}
     if script_global_files:
@@ -179,12 +179,15 @@ def _ambiguous_mapping_method_skip(
     return True
 
 
-def _get_script_global_files(store: GraphStore) -> set[str]:
-    """Return JS file paths loaded via HTML <script src> tags.
+def _get_html_script_tag_js_files(store: GraphStore) -> set[str]:
+    """Return JS file paths loaded via HTML <script src> tags (Phase 5 scope resolution).
 
     These files share the browser global scope — any module-scope function
     defined in them is callable from any co-loaded file without an import.
     The IMPORTS edges from HTML→JS are written by Phase 4.
+
+    NOTE: canonical definition — distinct from dead_code/plugin.py's
+    _get_script_global_files which queries the is_script_global flag.
     """
     try:
         rows = store.query(
