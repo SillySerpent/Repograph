@@ -1,0 +1,290 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Survey Response #{{ survey.id }}</h2>
+    <a href="{{ url_for('admin.surveys') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Surveys
+    </a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">Respondent Information</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Name:</strong> {{ survey.name }}</p>
+                <p><strong>Email:</strong> {{ survey.email }}</p>
+                {% if survey.user %}
+                <p><strong>User Account:</strong> 
+                    <a href="#" data-bs-toggle="modal" data-bs-target="#userModal">{{ survey.user.username }}</a>
+                </p>
+                {% endif %}
+            </div>
+            <div class="col-md-6">
+                <p><strong>Submitted:</strong> {{ survey.submitted_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p>
+                    <strong>Interest Level:</strong> 
+                    <span class="badge bg-{% if survey.interest_level >= 4 %}success{% elif survey.interest_level >= 3 %}info{% else %}secondary{% endif %}">
+                        {{ survey.interest_level }}/5
+                    </span>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Current Supplement Usage</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-1">
+                    {% if survey.current_supplements %}
+                        {% set supplements = survey.current_supplements|from_json %}
+                        {% if supplements|length > 0 %}
+                            {% for supplement in supplements %}
+                                <span class="badge bg-primary">{{ supplement }}</span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="badge bg-secondary">None selected</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="badge bg-secondary">None selected</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Price Preference</h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    {% if survey.price_preference == 'under30' %}
+                    <span class="badge bg-secondary">Under $30</span>
+                    {% elif survey.price_preference == '30to40' %}
+                    <span class="badge bg-secondary">$30-$40</span>
+                    {% elif survey.price_preference == '40to50' %}
+                    <span class="badge bg-secondary">$40-$50</span>
+                    {% elif survey.price_preference == '50to60' %}
+                    <span class="badge bg-success">$50-$60</span>
+                    {% elif survey.price_preference == '60to70' %}
+                    <span class="badge bg-info">$60-$70</span>
+                    {% elif survey.price_preference == '70to80' %}
+                    <span class="badge bg-warning">$70-$80</span>
+                    {% elif survey.price_preference == '80to90' %}
+                    <span class="badge bg-danger">$80-$90</span>
+                    {% elif survey.price_preference == 'over90' %}
+                    <span class="badge bg-danger">Over $90</span>
+                    {% elif survey.price_preference == 'over60' %}
+                    <span class="badge bg-secondary">Over $60</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">How They Heard About Us</h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    {% if survey.heard_from == 'social' %}
+                    <i class="fas fa-hashtag me-2"></i> Social Media
+                    {% elif survey.heard_from == 'friend' %}
+                    <i class="fas fa-users me-2"></i> Friend or Family
+                    {% elif survey.heard_from == 'search' %}
+                    <i class="fas fa-search me-2"></i> Search Engine
+                    {% elif survey.heard_from == 'ad' %}
+                    <i class="fas fa-ad me-2"></i> Online Advertisement
+                    {% elif survey.heard_from == 'other' %}
+                    <i class="fas fa-question-circle me-2"></i> Other
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Additional Comments</h5>
+            </div>
+            <div class="card-body">
+                {% if survey.additional_comments %}
+                <p>{{ survey.additional_comments }}</p>
+                {% else %}
+                <p class="text-muted">No additional comments provided.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">Detailed Feedback</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Ratings</h6>
+                <div class="mb-3">
+                    <label class="fw-bold">Effectiveness Rating:</label>
+                    <div class="progress">
+                        <div class="progress-bar bg-success" role="progressbar" 
+                            style="width: {{ survey.effectiveness_rating * 20 }}%" 
+                            aria-valuenow="{{ survey.effectiveness_rating }}" 
+                            aria-valuemin="0" 
+                            aria-valuemax="5">
+                            {{ survey.effectiveness_rating }}/5
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="fw-bold">Value Rating:</label>
+                    <div class="progress">
+                        <div class="progress-bar bg-info" role="progressbar" 
+                            style="width: {{ survey.value_rating * 20 }}%" 
+                            aria-valuenow="{{ survey.value_rating }}" 
+                            aria-valuemin="0" 
+                            aria-valuemax="5">
+                            {{ survey.value_rating }}/5
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="fw-bold">Convenience Rating:</label>
+                    <div class="progress">
+                        <div class="progress-bar bg-primary" role="progressbar" 
+                            style="width: {{ survey.convenience_rating * 20 }}%" 
+                            aria-valuenow="{{ survey.convenience_rating }}" 
+                            aria-valuemin="0" 
+                            aria-valuemax="5">
+                            {{ survey.convenience_rating }}/5
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="fw-bold">Purchase Likelihood:</label>
+                    <div class="progress">
+                        <div class="progress-bar bg-warning" role="progressbar" 
+                            style="width: {{ survey.purchase_likelihood * 20 }}%" 
+                            aria-valuenow="{{ survey.purchase_likelihood }}" 
+                            aria-valuemin="0" 
+                            aria-valuemax="5">
+                            {{ survey.purchase_likelihood }}/5
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <h6>Additional Feedback</h6>
+                <div class="mb-3">
+                    <label class="fw-bold">Specific Needs:</label>
+                    <p>{{ survey.specific_needs or "Not provided" }}</p>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="fw-bold">Pain Points:</label>
+                    <p>{{ survey.pain_points or "Not provided" }}</p>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="fw-bold">Expected Benefits:</label>
+                    <p>{{ survey.expected_benefits or "Not provided" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if survey.user %}
+<!-- User Detail Modal -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="userModalLabel">{{ survey.user.username }}'s Information</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Basic Information</h6>
+                        <dl class="row">
+                            <dt class="col-sm-4">Username:</dt>
+                            <dd class="col-sm-8">{{ survey.user.username }}</dd>
+                            
+                            <dt class="col-sm-4">Email:</dt>
+                            <dd class="col-sm-8">{{ survey.user.email }}</dd>
+                            
+                            <dt class="col-sm-4">Full Name:</dt>
+                            <dd class="col-sm-8">
+                                {% if survey.user.first_name or survey.user.last_name %}
+                                    {{ survey.user.first_name }} {{ survey.user.last_name }}
+                                {% else %}
+                                    <span class="text-muted">Not provided</span>
+                                {% endif %}
+                            </dd>
+                            
+                            <dt class="col-sm-4">Location:</dt>
+                            <dd class="col-sm-8">
+                                {% if survey.user.location %}
+                                    {{ survey.user.location }}
+                                {% else %}
+                                    <span class="text-muted">Not provided</span>
+                                {% endif %}
+                            </dd>
+                            
+                            <dt class="col-sm-4">Member Since:</dt>
+                            <dd class="col-sm-8">{{ survey.user.created_at.strftime('%B %d, %Y') }}</dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Fitness Information</h6>
+                        <dl class="row">
+                            <dt class="col-sm-4">Fitness Level:</dt>
+                            <dd class="col-sm-8">
+                                {% if survey.user.fitness_level %}
+                                    {{ survey.user.fitness_level|capitalize }}
+                                {% else %}
+                                    <span class="text-muted">Not provided</span>
+                                {% endif %}
+                            </dd>
+                            
+                            <dt class="col-sm-4">Fitness Goals:</dt>
+                            <dd class="col-sm-8">
+                                {% if survey.user.fitness_goals %}
+                                    {{ survey.user.fitness_goals }}
+                                {% else %}
+                                    <span class="text-muted">Not provided</span>
+                                {% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %} 

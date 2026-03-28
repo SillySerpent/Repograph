@@ -1,0 +1,395 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Survey Responses</h2>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Dashboard
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">All Survey Responses</h5>
+        <button class="btn btn-sm btn-light" id="export-csv">
+            <i class="fas fa-download"></i> Export CSV
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover" id="surveys-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>User</th>
+                        <th>Supplements</th>
+                        <th>Interest Level</th>
+                        <th>Purchase Likelihood</th>
+                        <th>Price Range</th>
+                        <th>Submitted</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for survey in surveys %}
+                        <tr>
+                            <td>{{ survey.id }}</td>
+                            <td>{{ survey.name }}</td>
+                            <td>{{ survey.email }}</td>
+                            <td>
+                                {% if survey.user %}
+                                    <a href="{{ url_for('admin.users') }}">{{ survey.user.username }}</a>
+                                {% else %}
+                                    <span class="badge bg-secondary">No Account</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if survey.current_supplements %}
+                                    {% set supplements = survey.current_supplements|from_json %}
+                                    {% if supplements|length > 0 %}
+                                        <span class="badge bg-info">{{ supplements|length }} selected</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">None</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary">None</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="progress" style="height: 20px; width: 80px;">
+                                    <div class="progress-bar bg-{% if survey.interest_level >= 4 %}success{% elif survey.interest_level >= 3 %}info{% else %}secondary{% endif %}" 
+                                        role="progressbar" 
+                                        style="width: {{ survey.interest_level * 20 }}%"
+                                        aria-valuenow="{{ survey.interest_level }}" 
+                                        aria-valuemin="0" 
+                                        aria-valuemax="5">
+                                        {{ survey.interest_level }}/5
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="progress" style="height: 20px; width: 80px;">
+                                    <div class="progress-bar bg-{% if survey.purchase_likelihood >= 4 %}success{% elif survey.purchase_likelihood >= 3 %}info{% else %}secondary{% endif %}" 
+                                        role="progressbar" 
+                                        style="width: {{ survey.purchase_likelihood * 20 }}%"
+                                        aria-valuenow="{{ survey.purchase_likelihood }}" 
+                                        aria-valuemin="0" 
+                                        aria-valuemax="5">
+                                        {{ survey.purchase_likelihood }}/5
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if survey.price_preference == 'under30' %}
+                                <span class="badge bg-secondary">Under $30</span>
+                                {% elif survey.price_preference == '30to40' %}
+                                <span class="badge bg-secondary">$30-$40</span>
+                                {% elif survey.price_preference == '40to50' %}
+                                <span class="badge bg-secondary">$40-$50</span>
+                                {% elif survey.price_preference == '50to60' %}
+                                <span class="badge bg-success">$50-$60</span>
+                                {% elif survey.price_preference == '60to70' %}
+                                <span class="badge bg-info">$60-$70</span>
+                                {% elif survey.price_preference == '70to80' %}
+                                <span class="badge bg-warning">$70-$80</span>
+                                {% elif survey.price_preference == '80to90' %}
+                                <span class="badge bg-danger">$80-$90</span>
+                                {% elif survey.price_preference == 'over90' %}
+                                <span class="badge bg-danger">Over $90</span>
+                                {% elif survey.price_preference == 'over60' %}
+                                <span class="badge bg-secondary">Over $60</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ survey.price_preference }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ survey.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>
+                                <a href="{{ url_for('admin.view_survey', survey_id=survey.id) }}" class="btn btn-sm btn-primary">View</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Survey Statistics Card -->
+<div class="card mt-4">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">Survey Statistics</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Interest Level</h5>
+                        <h2 class="text-center">
+                            {% set interest_total = namespace(value=0) %}
+                            {% set interest_count = namespace(value=0) %}
+                            {% for survey in surveys %}
+                                {% set interest_total.value = interest_total.value + survey.interest_level %}
+                                {% set interest_count.value = interest_count.value + 1 %}
+                            {% endfor %}
+                            {% if interest_count.value > 0 %}
+                                {{ "%.1f"|format(interest_total.value / interest_count.value) }}/5
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </h2>
+                        <p class="text-muted text-center">Average interest level ({{ interest_count.value }} responses)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Purchase Likelihood</h5>
+                        <h2 class="text-center">
+                            {% set purchase_total = namespace(value=0) %}
+                            {% set purchase_count = namespace(value=0) %}
+                            {% for survey in surveys %}
+                                {% set purchase_total.value = purchase_total.value + survey.purchase_likelihood %}
+                                {% set purchase_count.value = purchase_count.value + 1 %}
+                            {% endfor %}
+                            {% if purchase_count.value > 0 %}
+                                {{ "%.1f"|format(purchase_total.value / purchase_count.value) }}/5
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </h2>
+                        <p class="text-muted text-center">Average purchase likelihood ({{ purchase_count.value }} responses)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Price Preference</h5>
+                        <div class="price-distribution">
+                            {% set under30 = namespace(value=0) %}
+                            {% set range30to40 = namespace(value=0) %}
+                            {% set range40to50 = namespace(value=0) %}
+                            {% set range50to60 = namespace(value=0) %}
+                            {% set over60 = namespace(value=0) %}
+                            
+                            {% for survey in surveys %}
+                                {% if survey.price_preference == 'under30' %}
+                                    {% set under30.value = under30.value + 1 %}
+                                {% elif survey.price_preference == '30to40' %}
+                                    {% set range30to40.value = range30to40.value + 1 %}
+                                {% elif survey.price_preference == '40to50' %}
+                                    {% set range40to50.value = range40to50.value + 1 %}
+                                {% elif survey.price_preference == '50to60' %}
+                                    {% set range50to60.value = range50to60.value + 1 %}
+                                {% elif survey.price_preference == 'over60' %}
+                                    {% set over60.value = over60.value + 1 %}
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% set total = surveys|length %}
+                            
+                            {% if total > 0 %}
+                                <div class="price-item">
+                                    <label>Under $30 ({{ under30.value }})</label>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-success" role="progressbar" 
+                                            style="width: {{ (under30.value / total * 100) }}%" 
+                                            aria-valuenow="{{ under30.value }}" 
+                                            aria-valuemin="0" 
+                                            aria-valuemax="{{ total }}">
+                                            {{ under30.value }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="price-item">
+                                    <label>$30-$40 ({{ range30to40.value }})</label>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-info" role="progressbar" 
+                                            style="width: {{ (range30to40.value / total * 100) }}%" 
+                                            aria-valuenow="{{ range30to40.value }}" 
+                                            aria-valuemin="0" 
+                                            aria-valuemax="{{ total }}">
+                                            {{ range30to40.value }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="price-item">
+                                    <label>$40-$50 ({{ range40to50.value }})</label>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-warning" role="progressbar" 
+                                            style="width: {{ (range40to50.value / total * 100) }}%" 
+                                            aria-valuenow="{{ range40to50.value }}" 
+                                            aria-valuemin="0" 
+                                            aria-valuemax="{{ total }}">
+                                            {{ range40to50.value }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="price-item">
+                                    <label>$50-$60 ({{ range50to60.value }})</label>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-danger" role="progressbar" 
+                                            style="width: {{ (range50to60.value / total * 100) }}%" 
+                                            aria-valuenow="{{ range50to60.value }}" 
+                                            aria-valuemin="0" 
+                                            aria-valuemax="{{ total }}">
+                                            {{ range50to60.value }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="price-item">
+                                    <label>Over $60 ({{ over60.value }})</label>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-danger" role="progressbar" 
+                                            style="width: {{ (over60.value / total * 100) }}%" 
+                                            aria-valuenow="{{ over60.value }}" 
+                                            aria-valuemin="0" 
+                                            aria-valuemax="{{ total }}">
+                                            {{ over60.value }}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <p class="text-muted">No data available</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-8">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Rating Averages</h5>
+                        <div class="rating-averages">
+                            {% set effectiveness_total = namespace(value=0) %}
+                            {% set value_total = namespace(value=0) %}
+                            {% set convenience_total = namespace(value=0) %}
+                            {% set rating_count = namespace(value=0) %}
+                            
+                            {% for survey in surveys %}
+                                {% set effectiveness_total.value = effectiveness_total.value + survey.effectiveness_rating %}
+                                {% set value_total.value = value_total.value + survey.value_rating %}
+                                {% set convenience_total.value = convenience_total.value + survey.convenience_rating %}
+                                {% set rating_count.value = rating_count.value + 1 %}
+                            {% endfor %}
+                            
+                            {% if rating_count.value > 0 %}
+                                <div class="rating-item mb-3">
+                                    <label>Effectiveness ({{ rating_count.value }} responses)</label>
+                                    <div class="progress" style="height: 25px;">
+                                        <div class="progress-bar bg-success" role="progressbar" 
+                                            style="width: {{ (effectiveness_total.value / rating_count.value * 20) }}%" 
+                                            aria-valuenow="{{ effectiveness_total.value / rating_count.value }}" 
+                                            aria-valuemin="0" 
+                                            aria-valuemax="5">
+                                            {{ "%.1f"|format(effectiveness_total.value / rating_count.value) }}/5
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="rating-item mb-3">
+                                    <label>Value ({{ rating_count.value }} responses)</label>
+                                    <div class="progress" style="height: 25px;">
+                                        <div class="progress-bar bg-info" role="progressbar" 
+                                            style="width: {{ (value_total.value / rating_count.value * 20) }}%" 
+                                            aria-valuenow="{{ value_total.value / rating_count.value }}" 
+                                            aria-valuemin="0" 
+                                            aria-valuemax="5">
+                                            {{ "%.1f"|format(value_total.value / rating_count.value) }}/5
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="rating-item">
+                                    <label>Convenience ({{ rating_count.value }} responses)</label>
+                                    <div class="progress" style="height: 25px;">
+                                        <div class="progress-bar bg-primary" role="progressbar" 
+                                            style="width: {{ (convenience_total.value / rating_count.value * 20) }}%" 
+                                            aria-valuenow="{{ convenience_total.value / rating_count.value }}" 
+                                            aria-valuemin="0" 
+                                            aria-valuemax="5">
+                                            {{ "%.1f"|format(convenience_total.value / rating_count.value) }}/5
+                                        </div>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <p class="text-muted">No data available</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block additional_scripts %}
+<script>
+    $(document).ready(function() {
+        // Export CSV functionality
+        $('#export-csv').on('click', function() {
+            // Get table data
+            var table = document.getElementById('surveys-table');
+            var csv = [];
+            
+            // Header row
+            var header = [];
+            for (var i = 0; i < table.rows[0].cells.length - 1; i++) {
+                header.push(table.rows[0].cells[i].textContent);
+            }
+            csv.push(header.join(','));
+            
+            // Data rows
+            for (var i = 1; i < table.rows.length; i++) {
+                var row = [];
+                for (var j = 0; j < table.rows[i].cells.length - 1; j++) {
+                    var cellText = table.rows[i].cells[j].textContent.trim();
+                    row.push('"' + cellText + '"');
+                }
+                csv.push(row.join(','));
+            }
+            
+            // Create CSV file
+            var csvFile = new Blob([csv.join('\n')], {type: 'text/csv'});
+            
+            // Download link
+            var downloadLink = document.createElement('a');
+            downloadLink.download = 'survey_responses.csv';
+            downloadLink.href = window.URL.createObjectURL(csvFile);
+            downloadLink.style.display = 'none';
+            
+            // Trigger download
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        });
+    });
+</script>
+<style>
+    .price-item, .rating-item {
+        margin-bottom: 10px;
+    }
+    .price-item label, .rating-item label {
+        display: block;
+        margin-bottom: 3px;
+    }
+    .progress {
+        height: 20px;
+        margin-bottom: 10px;
+    }
+    .progress-bar {
+        text-align: center;
+        line-height: 20px;
+        font-weight: bold;
+        color: white;
+        text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+    }
+</style>
+{% endblock %} 

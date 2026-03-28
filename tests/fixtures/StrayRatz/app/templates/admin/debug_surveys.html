@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h1>Survey Debug</h1>
+    
+    <h2>Raw Survey Data</h2>
+    <p>Total Surveys: {{ surveys|length }}</p>
+    
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Interest</th>
+                <th>Effectiveness</th>
+                <th>Value</th>
+                <th>Convenience</th>
+                <th>Purchase</th>
+                <th>Price</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for survey in surveys %}
+            <tr>
+                <td>{{ survey.id }}</td>
+                <td>{{ survey.interest_level }} ({{ survey.interest_level.__class__.__name__ }})</td>
+                <td>{{ survey.effectiveness_rating }} ({{ survey.effectiveness_rating.__class__.__name__ }})</td>
+                <td>{{ survey.value_rating }} ({{ survey.value_rating.__class__.__name__ }})</td>
+                <td>{{ survey.convenience_rating }} ({{ survey.convenience_rating.__class__.__name__ }})</td>
+                <td>{{ survey.purchase_likelihood }} ({{ survey.purchase_likelihood.__class__.__name__ }})</td>
+                <td>{{ survey.price_preference }} ({{ survey.price_preference.__class__.__name__ }})</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <h2>Manual Calculations</h2>
+    
+    <h3>Interest Level</h3>
+    {% set interest_total = 0 %}
+    {% set interest_count = 0 %}
+    {% for survey in surveys %}
+        {% set interest_total = interest_total + survey.interest_level %}
+        {% set interest_count = interest_count + 1 %}
+        <p>After survey {{ survey.id }}: Total = {{ interest_total }}, Count = {{ interest_count }}</p>
+    {% endfor %}
+    <p><strong>Final: {{ interest_total }}/{{ interest_count }} = {{ interest_total / interest_count if interest_count > 0 else 'N/A' }}</strong></p>
+    
+    <h3>Purchase Likelihood</h3>
+    {% set purchase_total = 0 %}
+    {% set purchase_count = 0 %}
+    {% for survey in surveys %}
+        {% set purchase_total = purchase_total + survey.purchase_likelihood %}
+        {% set purchase_count = purchase_count + 1 %}
+        <p>After survey {{ survey.id }}: Total = {{ purchase_total }}, Count = {{ purchase_count }}</p>
+    {% endfor %}
+    <p><strong>Final: {{ purchase_total }}/{{ purchase_count }} = {{ purchase_total / purchase_count if purchase_count > 0 else 'N/A' }}</strong></p>
+    
+    <h3>Price Preferences</h3>
+    {% set range50to60 = 0 %}
+    {% set range60to70 = 0 %}
+    {% set range70to80 = 0 %}
+    {% set range80to90 = 0 %}
+    {% set over90 = 0 %}
+    {% set other = 0 %}
+    
+    {% for survey in surveys %}
+        {% if survey.price_preference == '50to60' %}
+            {% set range50to60 = range50to60 + 1 %}
+        {% elif survey.price_preference == '60to70' %}
+            {% set range60to70 = range60to70 + 1 %}
+        {% elif survey.price_preference == '70to80' %}
+            {% set range70to80 = range70to80 + 1 %}
+        {% elif survey.price_preference == '80to90' %}
+            {% set range80to90 = range80to90 + 1 %}
+        {% elif survey.price_preference == 'over90' %}
+            {% set over90 = over90 + 1 %}
+        {% else %}
+            {% set other = other + 1 %}
+        {% endif %}
+        <p>After survey {{ survey.id }} ({{ survey.price_preference }}): 50-60={{ range50to60 }}, 60-70={{ range60to70 }}, 70-80={{ range70to80 }}, 80-90={{ range80to90 }}, over90={{ over90 }}, other={{ other }}</p>
+    {% endfor %}
+    <p><strong>Final: 50-60={{ range50to60 }}, 60-70={{ range60to70 }}, 70-80={{ range70to80 }}, 80-90={{ range80to90 }}, over90={{ over90 }}, other={{ other }}</strong></p>
+</div>
+{% endblock %} 
