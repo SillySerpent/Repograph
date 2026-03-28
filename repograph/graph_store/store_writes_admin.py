@@ -120,6 +120,19 @@ class GraphStoreAdminWrites(GraphStoreBase):
             params
         )
 
+    def update_function_coverage(self, function_id: str, is_covered: bool) -> None:
+        """Set the ``is_covered`` flag on a Function node (schema v1.7, Block I4)."""
+        try:
+            self._require_conn().execute(
+                "MATCH (f:Function {id: $id}) SET f.is_covered = $covered",
+                {"id": function_id, "covered": is_covered},
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).debug(
+                "update_function_coverage: %s — %s", function_id, exc
+            )
+
     def apply_runtime_observation(
         self,
         function_id: str,

@@ -60,6 +60,7 @@ class GraphStoreBase(ObservableMixin):
         self._migrate_function_entry_score_details()
         self._migrate_function_runtime_overlay_columns()
         self._migrate_layer_role_http_columns()
+        self._migrate_coverage_columns()
         self._initialized = True
         self._calls_extra_lines = self._probe_calls_extra_lines_column()
 
@@ -126,6 +127,16 @@ class GraphStoreBase(ObservableMixin):
                 self._require_conn().execute(ddl)
             except Exception:
                 _logger.debug("migration v1.6: column already exists — skipping", ddl=ddl)
+
+    def _migrate_coverage_columns(self) -> None:
+        """schema v1.7 — Add Function.is_covered (pytest-cov overlay, Block I4)."""
+        for ddl in [
+            "ALTER TABLE Function ADD is_covered BOOLEAN DEFAULT false",
+        ]:
+            try:
+                self._require_conn().execute(ddl)
+            except Exception:
+                _logger.debug("migration v1.7: column already exists — skipping", ddl=ddl)
 
     def _probe_calls_extra_lines_column(self) -> bool:
         """True when CALLS.extra_site_lines exists (schema >= 1.1)."""
