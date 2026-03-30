@@ -22,7 +22,7 @@ from pathlib import Path
 from repograph.core.plugin_framework import PluginManifest, StaticAnalyzerPlugin
 from repograph.graph_store.store import GraphStore
 from repograph.utils.fs import _is_utility_file, read_file_content
-from repograph.utils.path_classifier import is_script_path, is_test_path
+from repograph.utils.path_classifier import classify_path, is_script_path, is_test_path
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +344,7 @@ _LIFECYCLE_NAMES = frozenset({
 
 _DUNDER = re.compile(r"^__\w+__$")
 _TEST_PREFIX = re.compile(r"^test_|^Test[A-Z]")
+_INDIRECT_RUNTIME_ENTRYPOINTS = frozenset({"trace_call", "install_pytest_plugin"})
 
 
 class _CallerInfo:
@@ -407,13 +408,25 @@ def _classify_tier(fn: dict, info: _CallerInfo) -> tuple[str, str]:
 
 def _is_hard_exempt(fn: dict) -> bool:
     name = fn.get("name") or ""
+    file_path = fn.get("file_path") or ""
+    norm_path = file_path.replace("\\", "/")
     if fn.get("is_entry_point"):
         return True
     if _DUNDER.match(name):
         return True
     if _TEST_PREFIX.match(name):
         return True
-    if is_test_path(fn.get("file_path") or ""):
+    if is_test_path(file_path):
+        return True
+    if classify_path(file_path) == "examples":
+        return True
+    if (
+        name == "build_plugin"
+        and norm_path.endswith("/plugin.py")
+        and "/plugins/" in ("/" + norm_path)
+    ):
+        return True
+    if name in _INDIRECT_RUNTIME_ENTRYPOINTS and norm_path == "repograph/runtime/tracer.py":
         return True
     if fn.get("decorators"):
         return True

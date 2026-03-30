@@ -14,6 +14,7 @@ import pytest
 
 from repograph.plugins.parsers.python.python_parser import PythonParser
 from repograph.core.models import FileRecord
+from repograph.plugins.static_analyzers.dead_code.plugin import _is_hard_exempt
 from repograph.utils.hashing import hash_file_content
 
 
@@ -181,6 +182,25 @@ class TestClosureExemptionIntegration:
         store.close()
 
         assert "truly_dead_helper" in dead_names
+
+
+def test_plugin_build_plugin_is_hard_exempt() -> None:
+    assert _is_hard_exempt(
+        {"name": "build_plugin", "file_path": "repograph/plugins/exporters/summary/plugin.py"}
+    )
+
+
+def test_examples_path_is_hard_exempt() -> None:
+    assert _is_hard_exempt(
+        {"name": "build_plugin", "file_path": "repograph/plugins/examples/exporter/plugin.py"}
+    )
+
+
+def test_runtime_tracer_install_entrypoints_are_hard_exempt() -> None:
+    assert _is_hard_exempt({"name": "trace_call", "file_path": "repograph/runtime/tracer.py"})
+    assert _is_hard_exempt(
+        {"name": "install_pytest_plugin", "file_path": "repograph/runtime/tracer.py"}
+    )
 
 
 # ---------------------------------------------------------------------------
