@@ -35,3 +35,6 @@ Older refactor notes are archived here:
 
 - [`archive/repo_history/`](archive/repo_history/)
 - index page: [`refactor/INDEX.md`](refactor/INDEX.md)
+
+Archived material is historical context only. Treat the active docs above and
+current CLI help as the source of truth for present behavior.
