@@ -42,13 +42,13 @@ from production files, optionally including test files.
 ### Production-oriented sync (recommended default)
 
 ```bash
-repograph sync --full
+repograph sync --static-only
 ```
 
 ### Audit sync including test config usage
 
 ```bash
-repograph sync --full --include-tests-config-registry
+repograph sync --static-only --include-tests-config-registry
 ```
 
 ## CI Guidance (separate intent)
@@ -56,9 +56,9 @@ repograph sync --full --include-tests-config-registry
 Keep production and audit views separate in CI:
 
 - Main CI / PR guardrail:
-  - `repograph sync --full`
+  - `repograph sync --static-only`
 - Optional audit job (nightly or opt-in):
-  - `repograph sync --full --include-tests-config-registry`
+  - `repograph sync --static-only --include-tests-config-registry`
 
 This avoids polluting production config inventories with test-only keys while
 still allowing deep audit coverage when needed.
