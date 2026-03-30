@@ -1957,7 +1957,7 @@ def query(
     limit: int = typer.Option(10, "--limit", "-n"),
     path: str | None = typer.Option(None, "--path"),
 ):
-    """Hybrid search: BM25 + fuzzy name search."""
+    """Hybrid search over functions and pathways."""
     root, store = _get_root_and_store(path)
     from repograph.search.hybrid import HybridSearch
 

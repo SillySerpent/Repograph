@@ -196,7 +196,7 @@ When latest sync mode is `incremental_traces_only`, reports represent a trace-ov
 | Python | High | High | High (type-annotated code) / Medium (untyped) |
 | TypeScript | High | Medium | Medium |
 | JavaScript | Medium | Low (bundle uncertainty) | Low–Medium |
-| Shell | Low (function detection only) | Low | None |
-| HTML | Structure only | N/A | Script-src links only |
-| CSS | Not analysed | N/A | N/A |
+| Shell | File-level indexing only | N/A | None |
+| HTML | File-level indexing + script-src scanning | N/A | Script-src links only |
+| CSS | File-level indexing only | N/A | None |
 | Markdown | Not analysed | N/A | Symbol cross-check only |

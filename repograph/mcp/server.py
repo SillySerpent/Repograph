@@ -64,7 +64,7 @@ def create_server(service: RepoGraphService, *, port: int | None = None):
 
     @mcp.tool()
     def search(query: str, limit: int = 10) -> list[dict]:
-        """Search by concept, keyword, or symbol name."""
+        """Search by keyword or symbol name via the service lookup path."""
         _log_tool_call("search", query_len=len(query), limit=int(limit))
         return service.search(query, limit=limit)
 

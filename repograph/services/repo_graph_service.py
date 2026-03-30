@@ -855,7 +855,7 @@ class RepoGraphService(ObservableMixin):
         },
     )
     def search(self, query: str, limit: int = 10) -> list[dict]:
-        """Search for symbols by name (fuzzy substring match).
+        """Search for symbols by name or simple keywords.
 
         Parameters
         ----------
@@ -867,6 +867,11 @@ class RepoGraphService(ObservableMixin):
         Returns
         -------
         list of dicts: qualified_name, file_path, signature.
+
+        Note
+        ----
+        This is the lighter service-side search path. The richer hybrid search
+        surface lives on the CLI `repograph query` command.
         """
         from repograph.search.query_tokens import tokenize_search_query
 
