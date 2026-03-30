@@ -44,6 +44,7 @@ def _make_file_record(path: str) -> FileRecord:
 
 
 def test_service_read_methods_start_one_observability_session(tmp_path: Path) -> None:
+    shutdown_observability()
     repo = tmp_path / "repo"
     repo.mkdir()
     rg_dir = repo / ".repograph"

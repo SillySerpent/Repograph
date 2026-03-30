@@ -217,7 +217,7 @@ def ensure_observability_session(
     Returns the created run id when this call started a new session; otherwise
     returns ``None`` and leaves the existing session untouched.
     """
-    if _active_config is not None:
+    if is_observability_active():
         if command_id:
             set_obs_context(command_id=command_id)
         return None
