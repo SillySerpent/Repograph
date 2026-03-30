@@ -7,6 +7,12 @@ RepoGraph exposes one implementation layer — **`RepoGraphService`** (`repograp
 - Entry point: **`RepoGraph`** (`repograph/api.py`).
 - It delegates every attribute to **`RepoGraphService`** via `__getattr__`, so the public surface matches the service’s public methods (sync, pathways, dead_code, full_report, etc.).
 - Use this for scripts, tests, and applications embedding RepoGraph.
+- When no structured-log session is active, read/query calls open one automatically under
+  `.repograph/logs/` and keep it for the lifetime of the `RepoGraph` / `RepoGraphService`
+  instance. Using `with RepoGraph(...) as rg:` keeps related queries in the same session.
+- `RepoGraph.sync(full=True)` remains a **static** full rebuild. The one-shot
+  automatic runtime-overlay workflow is currently the CLI command
+  **`repograph sync --full`**.
 
 ## CLI
 
@@ -16,7 +22,10 @@ RepoGraph exposes one implementation layer — **`RepoGraphService`** (`repograp
 
 ### Trace subcommands
 
-Use **`repograph trace collect`** (not `collection`). `trace install` sets up instrumentation; `sync` overlays traces when `.repograph/runtime/` has data.
+Use **`repograph trace collect`** (not `collection`). `trace install` is now an
+advanced/manual path for writing instrumentation files yourself; routine
+runtime overlay happens automatically on **`repograph sync --full`**. Manual
+traces are merged on the next `sync` when `.repograph/runtime/` has data.
 
 ## MCP server
 
@@ -88,3 +97,14 @@ The generated Cypher is always read-only — queries containing `CREATE`, `SET`,
 ## Logging
 
 User-visible messages for CLI sync use **`repograph.utils.logging`**: Rich output to **stderr**; this is **not** the stdlib `logging` module. **`warn_once`** deduplicates by the **full message string**. Plugin hook failures in the pipeline use **`warn`** per failure (see `repograph/pipeline/runner.py`).
+
+Structured observability JSONL now covers more than sync:
+- `sync` opens a dedicated pipeline run with per-phase and hook-stage spans.
+- CLI read commands that bypass the service wrapper (for example `status`, `doctor`, `config --include-tests`) open short-lived command sessions.
+- Python API and MCP read/query flows open a session automatically when none is active.
+
+## Concurrency note
+
+CLI/API/MCP read surfaces open the existing graph without running schema DDL.
+That makes concurrent readers safe with each other, but writes (`sync`, `clean`)
+still require exclusive access to the `.repograph/graph.db` directory.
