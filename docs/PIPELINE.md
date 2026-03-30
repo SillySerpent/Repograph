@@ -56,9 +56,11 @@ with `is_test`, `is_config`, `is_vendored` flags.
 **Input:** `list[FileRecord]`, store, `SymbolTable`  
 **Output:** `list[ParsedFile]`; `Function`, `Class`, `Variable` nodes in graph
 
-Runs tree-sitter parsers for Python, JavaScript, TypeScript, Shell, HTML,
-and CSS. Extracts function signatures, class definitions, variable
-assignments, decorators, docstrings, and line ranges.
+Runs the registered parser plugins for Python, JavaScript, and TypeScript.
+Extracts function signatures, class definitions, variable assignments,
+decorators, docstrings, and line ranges. Files in other indexed languages
+still remain part of the file graph even when they do not have a full parser
+plugin.
 
 ---
 
@@ -69,7 +71,10 @@ assignments, decorators, docstrings, and line ranges.
 **Output:** `IMPORTS` edges in graph
 
 Resolves `import` and `require` statements to their target `File` nodes.
-Adds all exported symbols to the `SymbolTable` for use by later phases.
+Adds all exported symbols to the `SymbolTable` for use by later phases. This
+phase also scans HTML files for local `<script src>` tags and inserts
+synthetic import edges so browser-loaded JavaScript files are connected into
+the graph.
 
 ---
 
@@ -221,7 +226,8 @@ alone cannot see.
 **Output:** embedding vectors on `Function` and `Class` nodes
 
 Generates semantic vector embeddings for function docstrings and signatures.
-Enables `search()` to use semantic similarity in addition to BM25 + fuzzy.
+Enables the hybrid search path to use semantic similarity in addition to
+keyword and fuzzy ranking when embeddings are available.
 
 ---
 
@@ -229,12 +235,21 @@ Enables `search()` to use semantic similarity in addition to BM25 + fuzzy.
 
 Several user-facing outputs are produced by plugins via hooks instead of numbered phase modules:
 
+- docs mirror sidecars
 - pathway context documents
+- agent guides
 - module summaries
+- pathway listings
+- summary/status surfaces
 - config registry
 - invariants
+- event topology exports
+- async task exports
+- entry-point summaries
 - doc warnings
-- runtime overlay summaries/findings
+- runtime overlay summaries
+- observed runtime findings
+- grouped report surfaces
 
 See:
 

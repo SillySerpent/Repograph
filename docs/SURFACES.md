@@ -13,11 +13,17 @@ RepoGraph exposes one implementation layer — **`RepoGraphService`** (`repograp
 - `RepoGraph.sync(full=True)` remains a **static** full rebuild. The one-shot
   automatic runtime-overlay workflow is currently the CLI command
   **`repograph sync --full`**.
+- `RepoGraphService.search()` / `RepoGraph.search()` is currently a lighter
+  service-side name/keyword lookup. The richer hybrid concept/pathway search
+  surface is the CLI command **`repograph query`**.
 
 ## CLI
 
 - Entry point: Typer app in **`repograph/cli.py`** (`repograph` console script).
-- Covers init, sync, report, summary, trace, pathway, node, impact, modules, config, invariants, test-map, mcp, doctor, export, clean, watch, etc.
+- Covers init, sync, report, summary, trace, pathway, node, impact, modules, config, invariants, test-map, query, mcp, doctor, export, clean, watch, etc.
+- `repograph query` is the richer hybrid search surface: keyword ranking,
+  fuzzy name matching, pathway matching, and optional semantic ranking when
+  embeddings are available.
 - Details: **`docs/CLI_REFERENCE.md`**.
 
 ### Trace subcommands
@@ -54,6 +60,10 @@ traces are merged on the next `sync` when `.repograph/runtime/` has data.
 | `query_graph` | NL→Cypher translation via Anthropic API (requires `anthropic` + `ANTHROPIC_API_KEY`) |
 
 Resources: `repograph://overview`, `.../pathways`, `.../communities`, `.../schema`.
+
+`search` in MCP delegates to the service `search()` method, so it is narrower
+than the CLI `repograph query` command. Use `query_graph` when you want
+natural-language graph questions rather than name/keyword lookup.
 
 ### `query_graph` — natural language queries (Block I5)
 

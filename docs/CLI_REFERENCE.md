@@ -237,7 +237,8 @@ repograph impact <symbol> [--depth N] [--path PATH]
 
 ## `repograph query TEXT`
 
-Hybrid search: BM25 + fuzzy name matching.
+Hybrid search over functions and pathways: keyword ranking, fuzzy name
+matching, and optional semantic ranking when embeddings are available.
 
 ```
 repograph query <text> [--limit N] [--path PATH]
