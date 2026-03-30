@@ -9,6 +9,10 @@ KuzuDB supports multiple concurrent **readers** but only one **writer** at a tim
 RepoGraph's sync pipeline is a writer. Multiple concurrent syncs against the same
 database will fail with `RepographDBLockedError`.
 
+RepoGraph read surfaces now open the existing graph **without** running schema
+DDL or migrations. That means concurrent readers are safe with each other, but
+they should still avoid running during a sync/write.
+
 **Readers** (safe to run concurrently with each other, but NOT during a write):
 - `repograph summary`
 - `repograph pathway`
@@ -67,9 +71,11 @@ index across worktrees — the file paths baked into the graph will be wrong.
 ```sh
 git worktree add /path/to/worktree main
 cd /path/to/worktree
-repograph init
-repograph sync --full
+repograph sync --static-only
 ```
+
+Use `repograph sync --full` instead if you want the one-shot static + dynamic
+overlay workflow for that worktree.
 
 ## Error: `RepographDBLockedError`
 
