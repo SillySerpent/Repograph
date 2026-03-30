@@ -13,16 +13,16 @@ Parsing is split into two phases:
 """
 from __future__ import annotations
 
-import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from repograph.core.models import FileRecord, ParsedFile, NodeID
 from repograph.graph_store.store import GraphStore
+from repograph.observability import get_logger, make_thread_context
 from repograph.parsing.symbol_table import SymbolTable
 from repograph.plugins.parsers.registry import parse_file
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger(__name__, subsystem="pipeline")
 
 # Threshold below which the ThreadPoolExecutor overhead is not worthwhile.
 _PARALLEL_THRESHOLD = 5
@@ -74,19 +74,22 @@ def _parse_files_parallel(files: list[FileRecord]) -> list[ParsedFile]:
             try:
                 results_seq.append(_parse_one_file(fr))
             except Exception as exc:
-                _logger.warning("p03: parse failed for %s: %s", fr.path, exc)
+                _logger.warning("p03: parse failed", path=fr.path, exc_msg=str(exc))
                 results_seq.append(ParsedFile(file_record=fr))
         return results_seq
 
     results: list[ParsedFile | None] = [None] * n
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        future_to_idx = {ex.submit(_parse_one_file, fr): i for i, fr in enumerate(files)}
+        future_to_idx = {
+            ex.submit(make_thread_context().run, _parse_one_file, fr): i
+            for i, fr in enumerate(files)
+        }
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
             exc = future.exception()
             if exc:
                 _logger.warning(
-                    "p03: parse failed for %s: %s", files[idx].path, exc
+                    "p03: parse failed", path=files[idx].path, exc_msg=str(exc)
                 )
                 results[idx] = ParsedFile(file_record=files[idx])
             else:
