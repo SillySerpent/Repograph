@@ -24,8 +24,11 @@ Use ``repograph test-map --any-call`` for a second metric: the share of **all** 
 
 ## What RepoGraph Knows
 
-RepoGraph performs **static analysis only** — it reads source files, builds a
-call graph, and applies heuristics.  It never executes code.
+RepoGraph always performs **static analysis** and can optionally augment it with
+**runtime overlay** evidence when traces have been merged into the graph (for
+example via `repograph sync --full`). Static analysis reads source files,
+builds a call graph, and applies heuristics; runtime overlay only adds evidence
+for functions and edges actually observed in collected traces.
 
 | Category | What is known |
 |----------|--------------|
@@ -98,6 +101,11 @@ superclass method for scoring. Canonical detail: `docs/ACCURACY_CONTRACT.md`.
 are referenced by external packages, documentation examples, or scripts outside
 the indexed repo root.
 
+Dead-code output is a review aid, not delete-on-sight authority. Convention
+surfaces such as plugin factories and runtime bootstrap helpers are intentionally
+exempted where RepoGraph knows about them, but external/plugin-style dispatch
+can still require human review.
+
 **Runtime traces vs static dead code:** Sync runs static analyzers (including dead code) during `on_graph_built`, then runs dynamic overlay when `.repograph/runtime/*.jsonl` traces exist (`on_traces_collected`). The overlay resolves `call` records to graph functions and calls `apply_runtime_observation`, which clears `is_dead` and dead-code tier fields for those functions when the trace matches the current `source_hash`. Anything **not** seen in traces is unchanged by overlay—dynamic analysis does not “prove live” except through resolved JSONL `fn` → graph `qualified_name` matches. Later sync passes skip re-applying static dead flags while `runtime_observed_for_hash` still matches the file hash (see `repograph/plugins/static_analyzers/dead_code/plugin.py`). Full contract: `docs/ACCURACY_CONTRACT.md` (“Runtime traces merged into the graph”).
 
 Runtime overlay diagnostics now expose:
@@ -157,6 +165,10 @@ Use `repograph summary --verbose` to see the breakdown for each entry point.
 - **Common interface methods** — `generate`, `run`, `compute`, `start`, `stop`,
   and similar names are exempt from high/medium duplicate detection because
   they are expected to appear on every class implementing a given interface.
+- **Plugin contract names** — required plugin hook/factory names such as
+  `build_plugin`, `parse_file`, `analyze`, and `inspect` are suppressed in
+  recognized plugin contexts. Treat duplicate reports as review candidates, not
+  automated cleanup authority.
 
 ---
 
@@ -169,8 +181,9 @@ from scratch on changed files but may miss:
 - Newly added callers of unchanged functions
 - Heritage changes in unchanged base classes
 
-**Recommendation:** run `repograph sync --full` after major refactors or when
-the call-edge count seems unexpectedly low.
+**Recommendation:** run `repograph sync --static-only` after major refactors or when
+the call-edge count seems unexpectedly low and you want a pure static rebuild.
+Use `repograph sync --full` when you also want automatic runtime overlay.
 
 When latest sync mode is `incremental_traces_only`, reports represent a trace-overlay refresh over an existing static index, not a fresh full rebuild.
 
