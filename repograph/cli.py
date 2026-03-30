@@ -7,10 +7,12 @@ how CLI relates to API/MCP: ``docs/SURFACES.md``.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -18,7 +20,13 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich import print as rprint
-from repograph.observability import get_logger, new_run_id, set_obs_context
+from repograph.observability import (
+    ensure_observability_session,
+    get_logger,
+    new_run_id,
+    set_obs_context,
+    shutdown_observability,
+)
 
 _logger = get_logger(__name__, subsystem="cli")
 
@@ -45,6 +53,40 @@ from repograph.interactive.logs_handler import logs_app  # noqa: E402
 app.add_typer(logs_app, name="logs")
 
 console = Console()
+
+
+def _print_not_indexed_error() -> None:
+    console.print("[red]Error:[/] No RepoGraph index found. Run [bold]repograph sync[/] first.")
+
+
+@contextmanager
+def _cli_command_session(repo_hint: str | None, *, command: str):
+    """Create a short-lived structured-log session for direct CLI commands."""
+    from repograph.config import get_repo_root, repograph_dir
+    from repograph.exceptions import RepographNotFoundError
+
+    try:
+        root = get_repo_root(repo_hint)
+    except RepographNotFoundError:
+        root = os.path.abspath(repo_hint or os.getcwd())
+
+    started_run = ensure_observability_session(Path(repograph_dir(root)) / "logs")
+    _logger.info("cli command started", command=command, repo_root=root)
+    try:
+        yield root
+        _logger.info("cli command finished", command=command, repo_root=root)
+    except Exception as exc:
+        _logger.error(
+            "cli command failed",
+            command=command,
+            repo_root=root,
+            exc_type=type(exc).__name__,
+            exc_msg=str(exc),
+        )
+        raise
+    finally:
+        if started_run is not None:
+            shutdown_observability()
 
 
 def _version_callback(value: bool) -> None:
@@ -74,21 +116,30 @@ def _cli_startup(
 
 def _get_root_and_store(repo_path: str | None = None):
     """Return (repo_root, store) for the current repo."""
+    import click
+
     from repograph.config import get_repo_root, db_path, is_initialized
     from repograph.exceptions import RepographNotFoundError
     from repograph.graph_store.store import GraphStore
+    from repograph.config import repograph_dir
 
     try:
         root = get_repo_root(repo_path)
     except RepographNotFoundError:
-        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        _print_not_indexed_error()
         raise typer.Exit(1)
     if not is_initialized(root):
-        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        _print_not_indexed_error()
         raise typer.Exit(1)
 
+    started_run = ensure_observability_session(Path(repograph_dir(root)) / "logs")
+    if started_run is not None:
+        ctx = click.get_current_context(silent=True)
+        if ctx is not None:
+            ctx.call_on_close(shutdown_observability)
+
     store = GraphStore(db_path(root))
-    store.initialize_schema()
+    store.prepare_read_state()
     return root, store
 
 
@@ -101,10 +152,10 @@ def _get_service(path: str | None = None):
     try:
         root = get_repo_root(path)
     except RepographNotFoundError:
-        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        _print_not_indexed_error()
         raise typer.Exit(1)
     if not is_initialized(root):
-        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        _print_not_indexed_error()
         raise typer.Exit(1)
     return root, RepoGraph(root, repograph_dir=repograph_dir(root))
 
@@ -416,60 +467,79 @@ def test_command(
 @app.command()
 def status(path: str | None = typer.Argument(None)):
     """Show index health: node counts, stale artifacts, last sync time."""
-    root, store = _get_root_and_store(path)
-    from repograph.config import repograph_dir
-    from repograph.docs.staleness import StalenessTracker
+    with _cli_command_session(path, command="status"):
+        root, store = _get_root_and_store(path)
+        from repograph.config import repograph_dir
+        from repograph.docs.staleness import StalenessTracker
 
-    stats = store.get_stats()
-    staleness = StalenessTracker(repograph_dir(root))
-    stale = staleness.get_all_stale()
+        try:
+            stats = store.get_stats()
+            staleness = StalenessTracker(repograph_dir(root))
+            stale = staleness.get_all_stale()
 
-    table = Table(title=f"RepoGraph Status — {root}", show_header=True)
-    table.add_column("Entity", style="cyan")
-    table.add_column("Count", justify="right")
-    for k, v in stats.items():
-        table.add_row(k.replace("_", " ").title(), str(v))
+            table = Table(title=f"RepoGraph Status — {root}", show_header=True)
+            table.add_column("Entity", style="cyan")
+            table.add_column("Count", justify="right")
+            for k, v in stats.items():
+                table.add_row(k.replace("_", " ").title(), str(v))
 
-    console.print(table)
+            console.print(table)
 
-    from repograph.pipeline.health import read_health_json
+            from repograph.pipeline.health import read_health_json
 
-    health = read_health_json(repograph_dir(root))
-    if health:
-        ce = health.get("call_edges_total")
-        ver = health.get("contract_version", "?")
-        mode = health.get("sync_mode", "?")
-        at = health.get("generated_at", "")
-        st = health.get("strict")
-        st_s = f" strict={st}" if st is not None else ""
-        hstat = health.get("status", "ok")
-        console.print(
-            f"\n[dim]Health[/] contract={ver}  sync={mode}{st_s}  "
-            f"status={hstat}  call_edges={ce}  at={at}"
-        )
-        if hstat == "failed":
-            console.print(
-                f"[red bold]Last sync failed:[/] {health.get('error_phase', '?')}: "
-                f"{health.get('error_message', '')[:500]}"
-            )
+            health = read_health_json(repograph_dir(root))
+            if health:
+                ce = health.get("call_edges_total")
+                ver = health.get("contract_version", "?")
+                mode = health.get("sync_mode", "?")
+                at = health.get("generated_at", "")
+                st = health.get("strict")
+                st_s = f" strict={st}" if st is not None else ""
+                hstat = health.get("status", "ok")
+                console.print(
+                    f"\n[dim]Health[/] contract={ver}  sync={mode}{st_s}  "
+                    f"status={hstat}  call_edges={ce}  at={at}"
+                )
+                if hstat == "failed":
+                    console.print(
+                        f"[red bold]Last sync failed:[/] {health.get('error_phase', '?')}: "
+                        f"{health.get('error_message', '')[:500]}"
+                    )
+                dyn = health.get("dynamic_analysis") or {}
+                if dyn:
+                    resolution = dyn.get("resolution") or "n/a"
+                    traces = int(dyn.get("trace_file_count") or 0)
+                    persisted = int(dyn.get("overlay_persisted_functions") or 0)
+                    if dyn.get("requested") and not dyn.get("executed"):
+                        console.print(
+                            f"[yellow]Dynamic analysis skipped:[/] {dyn.get('skipped_reason') or 'unspecified'} "
+                            f"(resolution={resolution})"
+                        )
+                    else:
+                        console.print(
+                            f"[dim]Dynamic[/] resolution={resolution} traces={traces} "
+                            f"runtime_observed={persisted} pytest_exit={dyn.get('pytest_exit_code')}"
+                        )
 
-    from repograph.pipeline.sync_state import lock_status
+            from repograph.pipeline.sync_state import lock_status
 
-    ls, li = lock_status(repograph_dir(root))
-    if ls == "active" and li:
-        console.print(
-            f"\n[yellow bold]Indexing in progress[/] pid={li.pid} mode={li.mode} "
-            f"since={li.started_at}"
-        )
-    elif ls == "stale":
-        console.print(
-            "\n[yellow]⚠ Stale sync.lock (crashed runner?); remove meta/sync.lock if no sync is running.[/]"
-        )
+            ls, li = lock_status(repograph_dir(root))
+            if ls == "active" and li:
+                console.print(
+                    f"\n[yellow bold]Indexing in progress[/] pid={li.pid} mode={li.mode} "
+                    f"since={li.started_at}"
+                )
+            elif ls == "stale":
+                console.print(
+                    "\n[yellow]⚠ Stale sync.lock (crashed runner?); remove meta/sync.lock if no sync is running.[/]"
+                )
 
-    if stale:
-        console.print(f"\n[yellow]⚠ {len(stale)} stale artifact(s). Run [bold]repograph sync[/] to refresh.[/]")
-    else:
-        console.print("\n[green]✓ All artifacts are current.[/]")
+            if stale:
+                console.print(f"\n[yellow]⚠ {len(stale)} stale artifact(s). Run [bold]repograph sync[/] to refresh.[/]")
+            else:
+                console.print("\n[green]✓ All artifacts are current.[/]")
+        finally:
+            store.close()
 
 
 # ---------------------------------------------------------------------------
@@ -650,7 +720,8 @@ def doctor(
     """Verify Python environment, imports, and optional graph database."""
     from repograph.diagnostics.env_doctor import run_doctor
 
-    run_doctor(repo_path=path, verbose=verbose)
+    with _cli_command_session(path, command="doctor"):
+        run_doctor(repo_path=path, verbose=verbose)
 
 
 @app.command(name="config")
@@ -673,94 +744,95 @@ def config_cmd(
     from repograph.api import RepoGraph
     from repograph.config import repograph_dir
 
-    root, store = _get_root_and_store(path)
+    with _cli_command_session(path, command="config"):
+        root, store = _get_root_and_store(path)
 
-    if include_tests:
-        from repograph.plugins.exporters.config_registry.plugin import build_registry
+        if include_tests:
+            from repograph.plugins.exporters.config_registry.plugin import build_registry
 
-        registry = build_registry(store, include_tests=True)
-        store.close()
-        if key is not None:
-            registry = {key: registry[key]} if key in registry else {}
-    else:
-        store.close()
-        with RepoGraph(root, repograph_dir=repograph_dir(root)) as rg:
-            registry = rg.config_registry(key=key)
-
-    if not registry:
-        if key:
-            console.print(f"[yellow]Config key '{key}' not found in registry.[/]")
+            registry = build_registry(store, include_tests=True)
+            store.close()
+            if key is not None:
+                registry = {key: registry[key]} if key in registry else {}
         else:
-            console.print("[yellow]Config registry not found.[/] Run [bold]repograph sync[/] first.")
-        raise typer.Exit(1)
+            store.close()
+            with RepoGraph(root, repograph_dir=repograph_dir(root)) as rg:
+                registry = rg.config_registry(key=key)
 
-    if as_json:
-        console.print(_json.dumps(registry, indent=2))
-        return
+        if not registry:
+            if key:
+                console.print(f"[yellow]Config key '{key}' not found in registry.[/]")
+            else:
+                console.print("[yellow]Config registry not found.[/] Run [bold]repograph sync[/] first.")
+            raise typer.Exit(1)
 
-    if key:
-        # Single key detail view
-        data = registry.get(key, {})
-        console.print(f"\n[bold cyan]Config key:[/] {key}")
-        console.print(f"[bold]Usage count:[/] {data.get('usage_count', 0)}\n")
-        pathways = data.get("pathways", [])
-        if pathways:
-            console.print("[bold]Used by pathways:[/]")
-            for pw in pathways:
-                console.print(f"  • {pw}")
-        files = data.get("files", [])
-        if files:
-            console.print(f"\n[bold]Read in files ({len(files)}):[/]")
-            for fp in files[:20]:
-                console.print(f"  {fp}")
-            if len(files) > 20:
-                console.print(f"  [dim]… and {len(files) - 20} more[/]")
-        return
-
-    # Split into top-level keys and dotted-path keys so granular entries
-    # (e.g. market.symbol) don't get buried below shallow aggregate keys
-    # that happen to have higher raw usage counts (e.g. market: 12 usages).
-    top_level = [(k, v) for k, v in registry.items() if "." not in k]
-    dotted = [(k, v) for k, v in registry.items() if "." in k]
-
-    def _registry_table(title: str, items: list) -> None:
-        if not items:
+        if as_json:
+            console.print(_json.dumps(registry, indent=2))
             return
-        t = Table(title=title, show_header=True)
-        t.add_column("Config Key", style="cyan", min_width=28)
-        t.add_column("Usage", justify="right", style="dim")
-        t.add_column("Pathways", justify="right")
-        t.add_column("Files", justify="right")
-        t.add_column("Sample Pathways", style="dim", max_width=40)
-        for k, data in items[:top]:
-            pw_list = data.get("pathways", [])
-            sample = ", ".join(pw_list[:2])
-            if len(pw_list) > 2:
-                sample += f" +{len(pw_list)-2}"
-            t.add_row(
-                k,
-                str(data.get("usage_count", 0)),
-                str(len(pw_list)),
-                str(len(data.get("files", []))),
-                sample or "[dim]—[/]",
-            )
-        console.print(t)
 
-    _registry_table(
-        f"Top-Level Config Keys  (top {min(top, len(top_level))} of {len(top_level)})",
-        top_level,
-    )
-    if dotted:
+        if key:
+            # Single key detail view
+            data = registry.get(key, {})
+            console.print(f"\n[bold cyan]Config key:[/] {key}")
+            console.print(f"[bold]Usage count:[/] {data.get('usage_count', 0)}\n")
+            pathways = data.get("pathways", [])
+            if pathways:
+                console.print("[bold]Used by pathways:[/]")
+                for pw in pathways:
+                    console.print(f"  • {pw}")
+            files = data.get("files", [])
+            if files:
+                console.print(f"\n[bold]Read in files ({len(files)}):[/]")
+                for fp in files[:20]:
+                    console.print(f"  {fp}")
+                if len(files) > 20:
+                    console.print(f"  [dim]… and {len(files) - 20} more[/]")
+            return
+
+        # Split into top-level keys and dotted-path keys so granular entries
+        # (e.g. market.symbol) don't get buried below shallow aggregate keys
+        # that happen to have higher raw usage counts (e.g. market: 12 usages).
+        top_level = [(k, v) for k, v in registry.items() if "." not in k]
+        dotted = [(k, v) for k, v in registry.items() if "." in k]
+
+        def _registry_table(title: str, items: list) -> None:
+            if not items:
+                return
+            t = Table(title=title, show_header=True)
+            t.add_column("Config Key", style="cyan", min_width=28)
+            t.add_column("Usage", justify="right", style="dim")
+            t.add_column("Pathways", justify="right")
+            t.add_column("Files", justify="right")
+            t.add_column("Sample Pathways", style="dim", max_width=40)
+            for k, data in items[:top]:
+                pw_list = data.get("pathways", [])
+                sample = ", ".join(pw_list[:2])
+                if len(pw_list) > 2:
+                    sample += f" +{len(pw_list)-2}"
+                t.add_row(
+                    k,
+                    str(data.get("usage_count", 0)),
+                    str(len(pw_list)),
+                    str(len(data.get("files", []))),
+                    sample or "[dim]—[/]",
+                )
+            console.print(t)
+
         _registry_table(
-            f"Dotted Config Keys  ({len(dotted)} granular paths)",
-            sorted(dotted, key=lambda x: -x[1]["usage_count"]),
+            f"Top-Level Config Keys  (top {min(top, len(top_level))} of {len(top_level)})",
+            top_level,
         )
-    total = len(registry)
-    console.print(
-        f"\n[dim]{total} config keys total "
-        f"({len(top_level)} top-level, {len(dotted)} dotted). "
-        f"Use [bold]--key <n>[/] for blast-radius detail.[/]"
-    )
+        if dotted:
+            _registry_table(
+                f"Dotted Config Keys  ({len(dotted)} granular paths)",
+                sorted(dotted, key=lambda x: -x[1]["usage_count"]),
+            )
+        total = len(registry)
+        console.print(
+            f"\n[dim]{total} config keys total "
+            f"({len(top_level)} top-level, {len(dotted)} dotted). "
+            f"Use [bold]--key <n>[/] for blast-radius detail.[/]"
+        )
 
 
 
@@ -1364,6 +1436,16 @@ def report(
     _kv("Call edges", str(health.get("call_edges_total", "?")))
     if health.get("partial_completion"):
         _kv("Partial completion", "true", "yellow")
+    dyn = health.get("dynamic_analysis") or {}
+    if dyn:
+        if dyn.get("requested") and not dyn.get("executed"):
+            _kv("Dynamic analysis", f"skipped ({dyn.get('skipped_reason') or 'unspecified'})", "yellow")
+        else:
+            _kv(
+                "Dynamic traces",
+                f"{int(dyn.get('trace_file_count') or 0)} file(s), "
+                f"{int(dyn.get('overlay_persisted_functions') or 0)} observed fn(s)",
+            )
 
     # ── 2. Purpose ───────────────────────────────────────────────────────────
     if data.get("purpose"):
@@ -2177,7 +2259,7 @@ def trace_collect(
     try:
         root = get_repo_root(path)
     except RepographNotFoundError:
-        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        _print_not_indexed_error()
         raise typer.Exit(1)
     rg_dir = rg_dir_fn(root)
 
@@ -2260,7 +2342,7 @@ def trace_report(
     try:
         root = get_repo_root(path)
     except RepographNotFoundError:
-        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        _print_not_indexed_error()
         raise typer.Exit(1)
     rg_dir = rg_dir_fn(root)
     td = trace_dir(rg_dir)
@@ -2280,14 +2362,10 @@ def trace_report(
 
     from repograph.graph_store.store import GraphStore
     store = GraphStore(db_path(root))
-    store.initialize_schema()
+    store.prepare_read_state()
 
-    persisted = 0
     try:
-        from repograph.runtime.overlay import persist_runtime_overlay_to_store
-
         report = overlay_traces(td, store, repo_root=root)
-        persisted = persist_runtime_overlay_to_store(store, report)
     finally:
         store.close()
 
@@ -2303,7 +2381,6 @@ def trace_report(
         f"  Trace calls:      {report.get('trace_call_records', 0)}\n"
         f"  Resolved calls:   {report.get('resolved_trace_calls', 0)}\n"
         f"  Unresolved calls: {report.get('unresolved_trace_calls', 0)}\n"
-        f"  Persisted to DB:  {persisted} function(s) (runtime_observed + dead flags cleared)\n"
     )
 
     if report["top_calls"]:
@@ -2348,7 +2425,7 @@ def trace_clear(
     try:
         root = get_repo_root(path)
     except RepographNotFoundError:
-        console.print("[red]Error:[/] Not initialized. Run [bold]repograph init[/] first.")
+        _print_not_indexed_error()
         raise typer.Exit(1)
     td = trace_dir(rg_dir_fn(root))
 
