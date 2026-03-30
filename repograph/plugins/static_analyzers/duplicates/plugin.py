@@ -55,6 +55,13 @@ _COMMON_INTERFACE_NAMES = frozenset({
     "execute", "process", "handle", "validate", "build", "create",
     "load", "save", "parse", "format", "render",
 })
+_PLUGIN_CONTRACT_NAMES = frozenset({
+    "build_plugin",
+    "parse_file",
+    "analyze",
+    "inspect",
+    "export",
+})
 
 _DUNDER_RE = re.compile(r"^__\w+__$")
 
@@ -160,7 +167,7 @@ def _find_high_severity(
         name = fn.get("name", "") or ""
         if _DUNDER_RE.match(name):
             continue
-        if name in _COMMON_INTERFACE_NAMES:
+        if name in _COMMON_INTERFACE_NAMES or _is_plugin_contract_function(fn):
             continue
         qname = fn.get("qualified_name", "") or ""
         fp = fn.get("file_path", "") or ""
@@ -211,6 +218,8 @@ def _find_high_severity(
     for cls in classes:
         name = cls.get("name", "") or ""
         if _DUNDER_RE.match(name):
+            continue
+        if _is_plugin_contract_class(cls):
             continue
         fp = cls.get("file_path", "") or ""
         if _is_non_prod(fp):
@@ -266,7 +275,7 @@ def _find_medium_severity(functions: list[dict]) -> list[DuplicateSymbolGroup]:
         name = fn.get("name", "") or ""
         if _DUNDER_RE.match(name):
             continue
-        if name in _COMMON_INTERFACE_NAMES:
+        if name in _COMMON_INTERFACE_NAMES or _is_plugin_contract_function(fn):
             continue
         fp = fn.get("file_path", "") or ""
         if _is_non_prod(fp):
@@ -346,6 +355,22 @@ def _is_non_prod(file_path: str) -> bool:
     """Return True if the file path belongs to tests or scripts."""
     fp = file_path.replace("\\", "/").lower()
     return any(pat in fp for pat in _NON_PROD_PATTERNS)
+
+
+def _is_plugin_contract_function(fn: dict) -> bool:
+    """True for convention-required plugin hook/factory names inside plugin modules."""
+    fp = (fn.get("file_path", "") or "").replace("\\", "/")
+    name = fn.get("name", "") or ""
+    if name not in _PLUGIN_CONTRACT_NAMES:
+        return False
+    return fp.endswith("/plugin.py") and "/plugins/" in ("/" + fp)
+
+
+def _is_plugin_contract_class(cls: dict) -> bool:
+    """True for plugin implementation classes whose duplicated names are usually benign."""
+    fp = (cls.get("file_path", "") or "").replace("\\", "/")
+    name = cls.get("name", "") or ""
+    return bool(name.endswith("Plugin") and fp.endswith("/plugin.py") and "/plugins/" in ("/" + fp))
 
 
 def _normalise_signature(sig: str) -> str:
