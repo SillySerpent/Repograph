@@ -32,6 +32,7 @@ build/
 dist/
 *.egg-info/
 conftest.py
+.repograph
 
 
 .env
