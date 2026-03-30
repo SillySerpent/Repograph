@@ -77,7 +77,7 @@ to a consistent state:
 
 ```sh
 rm -rf .repograph/graph.db .repograph/meta.json .repograph/community_snapshot.json
-repograph sync --full
+repograph sync --static-only
 ```
 
 This takes longer than an incremental sync but produces identical results.

@@ -35,10 +35,10 @@ Delete the database directory and re-run a full sync. All data is derived from t
 
 ```sh
 rm -rf .repograph/graph.db
-repograph sync --full
+repograph sync --static-only
 ```
 
-`repograph sync --full` internally calls `GraphStore.clear_all_data()` before rebuilding.
+`repograph sync --static-only` deletes and recreates the graph database before rebuilding.
 
 ### Option 2: Reinitialize schema, keep data
 
@@ -101,7 +101,7 @@ replaying the WAL. If WAL recovery itself fails:
 # Remove WAL files and retry — data may be lost back to last checkpoint
 ls .repograph/graph.db/*.wal 2>/dev/null
 rm .repograph/graph.db/*.wal 2>/dev/null || true
-repograph sync --full
+repograph sync --static-only
 ```
 
 ## Preventing corruption
