@@ -36,9 +36,10 @@ register in `plugins/<kind>/_registry.py` (or discovery when implemented).
 from __future__ import annotations
 
 import os
-import subprocess
+import shutil
 import sys
-import traceback
+import tomllib
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Callable
@@ -53,22 +54,37 @@ from repograph.config import (
     DEFAULT_MODULE_EXPANSION_THRESHOLD as _DEFAULT_MODULE_EXPANSION_THRESHOLD,
 )
 from repograph.core.models import FileRecord, ParsedFile
+from repograph.core.plugin_framework.contracts import HookName
 from repograph.graph_store.store import GraphStore
 from repograph.observability import (
     ObservabilityConfig,
     get_logger,
     init_observability,
+    make_thread_context,
     new_run_id,
     set_obs_context,
     shutdown_observability,
     span,
 )
+from repograph.observability._context import get_context_var
 from repograph.parsing.symbol_table import SymbolTable
 from repograph.utils import logging as rg_log
 
 _logger = get_logger(__name__, subsystem="pipeline")
 
 console = Console()
+
+
+@contextmanager
+def _phase_scope(phase: str, **metadata: Any):
+    """Set phase context and emit a span for one meaningful runner stage."""
+    prev_phase = get_context_var("phase")
+    set_obs_context(phase=phase)
+    try:
+        with span(phase, subsystem="pipeline", **metadata) as span_ctx:
+            yield span_ctx
+    finally:
+        set_obs_context(phase=prev_phase or "")
 
 
 def _validate_run_config_paths(config: "RunConfig") -> None:
@@ -179,7 +195,8 @@ def _run_phases_parallel(
     # In continue-on-error mode we still run the remaining phases so callers can
     # collect partial outputs while seeing the explicit p04 failure warning.
     try:
-        p04_imports.run(parsed, store, symbol_table, config.repo_root)
+        with _phase_scope("p04_imports", parsed_files=len(parsed)):
+            p04_imports.run(parsed, store, symbol_table, config.repo_root)
     except BaseException as exc:
         _handle_optional_phase_failure(config, "phase p04_imports", exc)
 
@@ -202,8 +219,18 @@ def _run_phases_parallel(
 
     failures: list[tuple[str, BaseException]] = []
 
+    def _wrap_phase(name: str, fn: Callable[[], object]) -> Callable[[], object]:
+        def _run() -> object:
+            with _phase_scope(name, parsed_files=len(parsed)):
+                return fn()
+
+        return _run
+
     with ThreadPoolExecutor(max_workers=len(phase_tasks)) as ex:
-        future_to_name = {ex.submit(fn): name for name, fn in phase_tasks.items()}
+        future_to_name = {
+            ex.submit(make_thread_context().run, _wrap_phase(name, fn)): name
+            for name, fn in phase_tasks.items()
+        }
         for future in as_completed(future_to_name):
             name = future_to_name[future]
             exc = future.exception()
@@ -240,6 +267,14 @@ def _run_experimental_pipeline_phases(
 
 
 def _handle_optional_phase_failure(config: RunConfig, phase: str, exc: BaseException) -> None:
+    _logger.warning(
+        "optional phase failed",
+        phase=phase,
+        exc_type=type(exc).__name__,
+        exc_msg=str(exc),
+        strict=config.strict,
+        continue_on_error=config.continue_on_error,
+    )
     if config.strict:
         raise exc
     if not config.continue_on_error:
@@ -256,13 +291,25 @@ def _ensure_scheduler_bootstrapped() -> None:
     get_hook_scheduler()
 
 
-def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) -> dict[str, object]:
+def _fire_hooks(
+    config: RunConfig,
+    store: GraphStore,
+    parsed: list[ParsedFile],
+    *,
+    run_graph_built: bool = True,
+    run_dynamic: bool = True,
+    run_evidence: bool = True,
+    run_export: bool = True,
+) -> dict[str, object]:
     """Fire all post-graph-build plugin hooks in order.
 
-    on_graph_built   — static analyzers run (includes dead_code, event_topology, etc.)
-    on_evidence      — evidence producers collect declared/observed data
-    on_export        — exporters write meta/ artefacts (doc_warnings, modules, …)
+    on_graph_built      — static analyzers run (dead_code, pathways, duplicates, ...)
     on_traces_collected — dynamic analyzers overlay runtime traces (when present)
+    on_evidence         — evidence producers collect declared/observed data
+    on_export           — exporters write meta/artefacts (doc_warnings, modules, ...)
+
+    Exporters run after dynamic analysis so generated artefacts reflect the
+    final graph state, including runtime-cleared dead-code flags.
     """
     from repograph.plugins.lifecycle import get_hook_scheduler
 
@@ -276,85 +323,184 @@ def _fire_hooks(config: RunConfig, store: GraphStore, parsed: list[ParsedFile]) 
         failed.append({"hook": hook_name, "plugin_id": plugin_id, "error": error[:500]})
         summary["failed"] = failed
 
-    # ── on_graph_built ───────────────────────────────────────────────────
-    try:
-        results = hooks.fire(
-            "on_graph_built",
-            store=store,
-            repo_path=config.repo_root,
-            repograph_dir=config.repograph_dir,
-            parsed=parsed,
-            config=config,
-        )
-        for r in results:
-            if not r.succeeded:
-                rg_log.warn(f"on_graph_built: {r.plugin_id} failed: {r.error}")
-                _mark_failed("on_graph_built", r.plugin_id, r.error or "")
-    except Exception as exc:
-        _mark_failed("on_graph_built", "scheduler", f"{type(exc).__name__}: {exc}")
-        _handle_optional_phase_failure(config, "on_graph_built hook", exc)
-
-    # ── on_evidence ──────────────────────────────────────────────────────
-    try:
-        results = hooks.fire(
-            "on_evidence",
-            store=store,
-            repo_path=config.repo_root,
-            repograph_dir=config.repograph_dir,
-        )
-        for r in results:
-            if not r.succeeded:
-                rg_log.warn(f"on_evidence: {r.plugin_id} failed: {r.error}")
-                _mark_failed("on_evidence", r.plugin_id, r.error or "")
-    except Exception as exc:
-        _mark_failed("on_evidence", "scheduler", f"{type(exc).__name__}: {exc}")
-        _handle_optional_phase_failure(config, "on_evidence hook", exc)
-
-    # ── on_export ────────────────────────────────────────────────────────
-    try:
-        results = hooks.fire(
-            "on_export",
-            store=store,
-            repograph_dir=config.repograph_dir,
-            config=config,
-        )
-        for r in results:
-            if not r.succeeded:
-                rg_log.warn(f"on_export: {r.plugin_id} failed: {r.error}")
-                _mark_failed("on_export", r.plugin_id, r.error or "")
-    except Exception as exc:
-        _mark_failed("on_export", "scheduler", f"{type(exc).__name__}: {exc}")
-        _handle_optional_phase_failure(config, "on_export hook", exc)
-
-    # ── on_traces_collected (dynamic analysis) ───────────────────────────
-    trace_dir = Path(config.repograph_dir) / "runtime"
-    if trace_dir.exists() and any(trace_dir.iterdir()):
-        rg_log.info(f"Dynamic traces found — running overlay analysis")
+    def _run_stage(
+        hook_name: HookName,
+        failure_label: str,
+        **kwargs: Any,
+    ) -> list[Any]:
         try:
-            results = hooks.fire(
+            with span(
+                f"hook_stage.{hook_name}",
+                subsystem="pipeline",
+                hook=hook_name,
+            ):
+                results = hooks.fire(hook_name, **kwargs)
+            for r in results:
+                if not r.succeeded:
+                    rg_log.warn(f"{hook_name}: {r.plugin_id} failed: {r.error}")
+                    _mark_failed(hook_name, r.plugin_id, r.error or "")
+            return list(results)
+        except Exception as exc:
+            _mark_failed(hook_name, "scheduler", f"{type(exc).__name__}: {exc}")
+            _handle_optional_phase_failure(config, failure_label, exc)
+            return []
+
+    if run_graph_built:
+        with _phase_scope("hook_stage.on_graph_built"):
+            _run_stage(
+                "on_graph_built",
+                "on_graph_built hook",
+                store=store,
+                repo_path=config.repo_root,
+                repograph_dir=config.repograph_dir,
+                parsed=parsed,
+                config=config,
+            )
+
+    trace_dir = Path(config.repograph_dir) / "runtime"
+    if run_dynamic and trace_dir.exists() and any(trace_dir.iterdir()):
+        rg_log.info("Dynamic traces found — running overlay analysis")
+        with _phase_scope("hook_stage.on_traces_collected"):
+            results = _run_stage(
                 "on_traces_collected",
+                "dynamic analysis hooks",
                 trace_dir=trace_dir,
                 store=store,
                 repo_path=config.repo_root,
                 repo_root=config.repo_root,
                 config=config,
             )
-            for r in results:
-                if not r.succeeded:
-                    rg_log.warn(f"on_traces_collected: {r.plugin_id} failed: {r.error}")
-                    _mark_failed("on_traces_collected", r.plugin_id, r.error or "")
-            hooks.fire("on_traces_analyzed", store=store, config=config)
-            n_findings = sum(len(r.result or []) for r in results if r.succeeded)
-            # Findings = alert-style rows only (e.g. static-dead ∩ observed, new dynamic
-            # edges). Persisted runtime_* columns are logged by the overlay plugin.
-            rg_log.success(
-                f"Dynamic overlay: {n_findings} alert finding(s) "
-                f"(0 is normal if dead-code already skipped observed symbols)"
-            )
+        try:
+            with _phase_scope("hook_stage.on_traces_analyzed"):
+                hooks.fire("on_traces_analyzed", store=store, config=config)
         except Exception as exc:
-            _mark_failed("on_traces_collected", "scheduler", f"{type(exc).__name__}: {exc}")
-            _handle_optional_phase_failure(config, "dynamic analysis hooks", exc)
+            _mark_failed("on_traces_analyzed", "scheduler", f"{type(exc).__name__}: {exc}")
+            _handle_optional_phase_failure(config, "on_traces_analyzed hook", exc)
+        n_findings = sum(len(r.result or []) for r in results if getattr(r, "succeeded", False))
+        summary["dynamic_findings_count"] = n_findings
+        rg_log.success(
+            f"Dynamic overlay: {n_findings} alert finding(s) "
+            f"(0 is normal if dead-code already skipped observed symbols)"
+        )
+
+    if run_evidence:
+        with _phase_scope("hook_stage.on_evidence"):
+            _run_stage(
+                "on_evidence",
+                "on_evidence hook",
+                store=store,
+                repo_path=config.repo_root,
+                repograph_dir=config.repograph_dir,
+            )
+
+    if run_export:
+        with _phase_scope("hook_stage.on_export"):
+            _run_stage(
+                "on_export",
+                "on_export hook",
+                store=store,
+                repograph_dir=config.repograph_dir,
+                config=config,
+            )
     return summary
+
+
+def _merge_hook_summaries(*parts: dict[str, Any]) -> dict[str, Any]:
+    """Merge multiple hook summary payloads into one reportable dict."""
+    failed: list[dict[str, Any]] = []
+    dynamic_findings_count = 0
+    for part in parts:
+        failed.extend(list(part.get("failed") or []))
+        dynamic_findings_count += int(part.get("dynamic_findings_count") or 0)
+    return {
+        "failed_count": len(failed),
+        "warnings_count": len(failed),
+        "failed": failed,
+        "dynamic_findings_count": dynamic_findings_count,
+    }
+
+
+def _count_valid_runtime_observations(store: GraphStore) -> int:
+    """Count functions whose persisted runtime observations match current source."""
+    total = 0
+    for fn in store.get_all_functions():
+        if fn.get("runtime_observed") and (fn.get("runtime_observed_for_hash") or "") == (
+            fn.get("source_hash") or ""
+        ):
+            total += 1
+    return total
+
+
+def _run_full_build_steps(config: RunConfig, store: GraphStore) -> tuple[list[FileRecord], list[ParsedFile]]:
+    """Execute the full static graph-build phases and return ``(files, parsed)``."""
+    from repograph.pipeline.phases import (
+        p01_walk, p02_structure, p03_parse, p09_communities, p10_processes,
+    )
+    from repograph.pipeline.phases import p03b_framework_tags
+
+    symbol_table = SymbolTable()
+    _ensure_scheduler_bootstrapped()
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Phase 1: Walking repository...", total=None)
+        with _phase_scope("p01_walk", repo_root=config.repo_root) as phase_span:
+            files = p01_walk.run(config.repo_root)
+            phase_span.add_metadata(file_count=len(files))
+        progress.update(task, description=f"Phase 1: Found {len(files)} files")
+
+        progress.add_task("Phase 2: Building folder structure...", total=None)
+        with _phase_scope("p02_structure", file_count=len(files)):
+            p02_structure.run(files, store, config.repo_root)
+
+        task3 = progress.add_task(f"Phase 3: Parsing {len(files)} files...", total=None)
+        with _phase_scope("p03_parse", file_count=len(files)) as phase_span:
+            parsed = p03_parse.run(files, store, symbol_table)
+            phase_span.add_metadata(parsed_files=len(parsed))
+        progress.update(task3, description=f"Phase 3: Parsed {len(parsed)} files")
+
+        progress.add_task("Phase 3b: Applying framework tags...", total=None)
+        with _phase_scope("p03b_framework_tags", parsed_files=len(parsed)):
+            p03b_framework_tags.run(parsed, store)
+
+        progress.add_task("Phases 4-8: Resolving relationships (parallel)...", total=None)
+        with _phase_scope("p04_to_p08_parallel", parsed_files=len(parsed), include_git=config.include_git):
+            _run_phases_parallel(
+                config,
+                parsed,
+                store,
+                symbol_table,
+                include_git=config.include_git,
+            )
+
+        progress.add_task("Phase 9: Detecting communities...", total=None)
+        with _phase_scope("p09_communities", min_community_size=config.min_community_size):
+            p09_communities.run(store, min_community_size=config.min_community_size)
+        p09_communities.save_community_snapshot(config.repograph_dir, store)
+
+        progress.add_task("Phase 10: Scoring entry points...", total=None)
+        with _phase_scope("p10_processes"):
+            p10_processes.run(store)
+
+        if config.include_embeddings:
+            progress.add_task("Phase 13: Building embeddings...", total=None)
+            try:
+                from repograph.pipeline.phases import p13_embeddings
+
+                with _phase_scope("p13_embeddings"):
+                    p13_embeddings.run(store)
+            except ImportError:
+                if config.strict:
+                    raise
+                console.print("[yellow]sentence-transformers not installed, skipping embeddings[/]")
+
+        progress.add_task("Running plugin hooks...", total=None)
+
+    return files, parsed
 
 
 # ---------------------------------------------------------------------------
@@ -367,13 +513,6 @@ def run_full_pipeline(config: RunConfig) -> dict:
     Phases p01–p13 build the graph from scratch.  All analysis and export work
     is performed by plugin hooks fired at the end — no direct p15–p20 calls.
     """
-    from repograph.pipeline.phases import (
-        p01_walk, p02_structure, p03_parse, p04_imports,
-        p05_calls, p05b_callbacks, p06_heritage, p07_variables, p08_types,
-        p09_communities, p10_processes, p12_coupling,
-    )
-    from repograph.pipeline.phases import p03b_framework_tags, p05c_http_calls, p06b_layer_classify
-    from repograph.docs.staleness import StalenessTracker
     from repograph.pipeline.incremental import IncrementalDiff
     from repograph.pipeline.sync_state import clear_sync_lock, write_sync_lock
     from repograph.pipeline.health import (
@@ -401,68 +540,9 @@ def run_full_pipeline(config: RunConfig) -> dict:
         _delete_db_dir(db_path)
         store = GraphStore(db_path)
         store.initialize_schema()
-
-        symbol_table = SymbolTable()
-        _ensure_scheduler_bootstrapped()
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-
-            # ── CORE GRAPH BUILD (p01–p12) ────────────────────────────────
-            task = progress.add_task("Phase 1: Walking repository...", total=None)
-            files = p01_walk.run(config.repo_root)
-            progress.update(task, description=f"Phase 1: Found {len(files)} files")
-
-            progress.add_task("Phase 2: Building folder structure...", total=None)
-            p02_structure.run(files, store, config.repo_root)
-
-            task3 = progress.add_task(f"Phase 3: Parsing {len(files)} files...", total=None)
-            parsed = p03_parse.run(files, store, symbol_table)
-            progress.update(task3, description=f"Phase 3: Parsed {len(parsed)} files")
-
-            progress.add_task("Phase 3b: Applying framework tags...", total=None)
-            p03b_framework_tags.run(parsed, store)
-
-            # Phases 4-8 (+ 5c, 6b, 12) are mutually independent: each writes a
-            # different relationship type and only reads immutable parsed/symbol
-            # data from Phase 3.  Run them in a thread pool to parallelise the
-            # CPU-bound resolution work.  KuzuDB serialises the actual DB writes.
-            progress.add_task("Phases 4-8: Resolving relationships (parallel)...", total=None)
-            _run_phases_parallel(
-                config, parsed, store, symbol_table,
-                include_git=config.include_git,
-            )
-
-            progress.add_task("Phase 9: Detecting communities...", total=None)
-            p09_communities.run(store, min_community_size=config.min_community_size)
-            p09_communities.save_community_snapshot(config.repograph_dir, store)
-
-            progress.add_task("Phase 10: Scoring entry points...", total=None)
-            p10_processes.run(store)
-
-            if config.include_embeddings:
-                progress.add_task("Phase 13: Building embeddings...", total=None)
-                try:
-                    from repograph.pipeline.phases import p13_embeddings
-                    p13_embeddings.run(store)
-                except ImportError:
-                    if config.strict:
-                        raise
-                    console.print("[yellow]sentence-transformers not installed, skipping embeddings[/]")
-
-            # ── PLUGIN HOOKS ──────────────────────────────────────────────
-            # on_graph_built → on_evidence → on_export → on_traces_collected
-            # No direct phase calls below this line.
-            progress.add_task("Running plugin hooks...", total=None)
-
+        files, parsed = _run_full_build_steps(config, store)
         _run_experimental_pipeline_phases(config, store, parsed)
         hook_summary = _fire_hooks(config, store, parsed)
-
-        staleness = StalenessTracker(config.repograph_dir)
         differ = IncrementalDiff(config.repograph_dir)
         differ.save_index({fr.path: fr for fr in files})
 
