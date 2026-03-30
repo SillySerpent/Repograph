@@ -146,7 +146,7 @@ def collect_doctor_results(repo_path: str | None = None, verbose: bool = False) 
             from repograph.graph_store.store import GraphStore
 
             st = GraphStore(dbp)
-            st.initialize_schema()
+            st.prepare_read_state()
             rows = st.query("MATCH (f:File) RETURN count(f)")
             results.append(
                 CheckResult(
@@ -161,7 +161,10 @@ def collect_doctor_results(repo_path: str | None = None, verbose: bool = False) 
     else:
         results.append(
             CheckResult(
-                "graph_open", True, "index not initialized yet — run `repograph init` then `sync`.", required=False
+                "graph_open",
+                True,
+                "index not initialized yet — run `repograph sync` to bootstrap the index (`repograph init` is optional).",
+                required=False,
             )
         )
 
