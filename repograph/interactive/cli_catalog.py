@@ -89,17 +89,16 @@ def all_categories() -> tuple[CliCategory, ...]:
                     argv=("sync",),
                     title="sync — build or refresh the index",
                     body="Runs the pipeline (walk → parse → graph …). Incremental by default; "
-                    "use --full for a complete rebuild. Optional embeddings, git coupling, strict mode.",
+                    "use --full for the canonical one-shot full rebuild with automatic runtime overlay. "
+                    "Use --static-only for a pure static rebuild. Optional embeddings, git coupling, strict mode.",
                     flags=(
                         FlagLine(
                             "--full",
-                            "Complete rebuild of the index (not incremental). Use after large refactors or if "
-                            "results look wrong.",
+                            "Complete rebuild plus automatic traced-test overlay when RepoGraph can resolve a test command.",
                         ),
                         FlagLine(
-                            "--full-with-tests",
-                            "Full index, then sets up tracing, runs pytest, and merges runtime calls into the graph. "
-                            "Heavier, but links tests to real execution.",
+                            "--static-only",
+                            "Complete rebuild of the index with no automatic test execution or runtime overlay.",
                         ),
                         FlagLine(
                             "--embeddings",
@@ -123,9 +122,9 @@ def all_categories() -> tuple[CliCategory, ...]:
                             "When building the config-key registry, include test files (slower, broader picture).",
                         ),
                     ),
-                    examples=("repograph sync", "repograph sync --full", "repograph sync --full-with-tests"),
+                    examples=("repograph sync", "repograph sync --full", "repograph sync --static-only"),
                     run_default_help=(
-                        "Updates the graph for changed files (incremental). First sync after init can take a while; "
+                        "Updates the graph for changed files (incremental). First sync can take a while; "
                         "later runs are usually faster."
                     ),
                     run_submenu_intro=(
@@ -133,14 +132,14 @@ def all_categories() -> tuple[CliCategory, ...]:
                     ),
                     run_variants=(
                         RunVariant(
-                            "Full rebuild (--full)",
+                            "Full rebuild + runtime overlay (--full)",
                             ("--full",),
-                            "Re-parses and rebuilds the index from scratch (slower, but fixes a stale or broken graph).",
+                            "Re-parses and rebuilds the index from scratch, then auto-runs traced tests when configured.",
                         ),
                         RunVariant(
-                            "Full + tests + trace merge (--full-with-tests)",
-                            ("--full-with-tests",),
-                            "Full index, then installs tracing, runs pytest, and merges runtime call data into the graph.",
+                            "Full static-only rebuild (--static-only)",
+                            ("--static-only",),
+                            "Re-parses and rebuilds the index from scratch without running tests.",
                         ),
                         RunVariant(
                             "Full + embeddings (--full --embeddings)",
@@ -741,13 +740,13 @@ def all_categories() -> tuple[CliCategory, ...]:
         CliCategory(
             id="trace",
             title="Trace & dynamic overlay",
-            intro="Runtime JSONL traces under .repograph/runtime/ — install, collect, report, clear.",
+            intro="Advanced/manual runtime JSONL tooling under .repograph/runtime/. Routine dynamic overlay happens on `repograph sync --full`.",
             commands=(
                 CliEntry(
                     key="trace_install",
                     argv=("trace", "install"),
                     title="trace install",
-                    body="Writes conftest.py or sitecustomize.py so pytest/python emits call traces to JSONL.",
+                    body="Writes conftest.py or sitecustomize.py so pytest/python emits call traces to JSONL. Use this only when you want manual tracing control.",
                     flags=(
                         FlagLine(
                             "--mode / -m",
