@@ -32,7 +32,7 @@ from repograph.core.plugin_framework.contracts import (
     TracerPlugin,
 )
 from repograph.core.plugin_framework.registry import PluginRegistry
-from repograph.observability import get_logger, log_swallowed, set_obs_context
+from repograph.observability import get_logger, log_swallowed, set_obs_context, span
 
 _logger = get_logger(__name__, subsystem="plugins")
 
@@ -91,7 +91,14 @@ class PluginHookScheduler:
             result = error = None
             set_obs_context(plugin_id=pid, hook=hook)
             try:
-                result = self._dispatch(plugin, hook, kwargs)
+                with span(
+                    "plugin_dispatch",
+                    subsystem="plugins",
+                    hook=hook,
+                    plugin_id=pid,
+                    plugin_kind=plugin.manifest.kind,
+                ):
+                    result = self._dispatch(plugin, hook, kwargs)
                 _logger.debug("plugin dispatched", hook=hook, plugin_id=pid)
             except Exception as exc:  # noqa: BLE001
                 error = f"{type(exc).__name__}: {exc}"
