@@ -126,7 +126,7 @@ jobs:
       - name: Bootstrap repo (full CI extras)
         run: |
           chmod +x setup.sh
-          ./setup.sh --no-interactive-setup --extras '[dev,mcp]' --skip-doctor --skip-help
+          ./setup.sh --no-interactive-setup --extras '[dev,community,mcp,embeddings,templates]' --skip-doctor --skip-help
 
       - name: Run full test suite
         run: |
