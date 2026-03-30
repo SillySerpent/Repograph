@@ -39,6 +39,13 @@ The slowest phases are typically:
 | `p09_communities` | Leiden community detection | `min_community_size` (fewer large communities = faster) |
 | `p13_pathways` | Pathway assembly | `max_context_tokens` (smaller = fewer tokens to process) |
 
+Dynamic full rebuilds also emit spans for:
+- `dynamic_full.step1_static_rebuild`
+- `dynamic_full.step2_traced_tests`
+- `dynamic_full.step3_finalize_overlay`
+
+Those are the first places to check when `repograph sync --full` is slower or hotter than expected.
+
 ## Parallel parsing (Phase 3)
 
 Phase 3 uses `ThreadPoolExecutor` with `workers` threads. Each thread gets its own
@@ -68,7 +75,7 @@ significantly faster and usually produces equivalent results.
 
 To force a full re-run (e.g., after a large structural refactor):
 ```sh
-repograph sync --full
+repograph sync --static-only
 ```
 
 ## Memory usage
@@ -100,7 +107,7 @@ To limit memory, run the sync on a machine with less RAM or reduce parallel work
 
 ```sh
 # Full sync with timing output in logs
-repograph sync --full
+repograph sync --static-only
 repograph logs show | python3 -c "
 import sys, json
 for line in sys.stdin:
