@@ -5,7 +5,7 @@ RepoGraph turns a codebase into a queryable intelligence graph for exploration, 
 It is a **hybrid static + dynamic analysis tool**:
 
 - **Static analysis** maps files, symbols, imports, call edges, pathways, dead code signals, config usage, and invariants.
-- **Dynamic analysis** overlays runtime traces (`trace install` + test/run + `sync`) to add observed evidence and correct static blind spots.
+- **Dynamic analysis** overlays runtime traces to add observed evidence and correct static blind spots. The default one-shot path is `repograph sync --full`; manual `trace` subcommands are still available for advanced workflows.
 
 ## Core Capabilities
 
@@ -28,12 +28,13 @@ Or direct CLI:
 
 ```bash
 pip install -e "."
-repograph init
 repograph sync --full
 repograph summary
 ```
 
 Requirements: Python 3.11+
+
+`repograph init` is optional. It only creates the `.repograph/` folder layout ahead of time.
 
 ## Interfaces
 
@@ -45,7 +46,7 @@ Primary interface for local development:
 - exploration: `summary`, `report`, `modules`, `node`, `query`, `impact`
 - architecture: `invariants`, `config`, `test-map`, `events`, `interfaces`, `deps`
 - pathways: `pathway list`, `pathway show`, `pathway update`
-- runtime tracing: `trace install`, `trace collect`, `trace report`, `trace clear`
+- runtime tracing (advanced/manual): `trace install`, `trace collect`, `trace report`, `trace clear`
 - integrations: `mcp`, `export`, `doctor`, `test`
 
 Full command and flags: [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md)
@@ -63,6 +64,9 @@ with RepoGraph("/path/to/repo") as rg:
     print(rg.dead_code())
     print(rg.full_report())
 ```
+
+`RepoGraph.sync(full=True)` is a static full rebuild. The automatic traced-test
+overlay workflow is the CLI command `repograph sync --full`.
 
 Surface details: [`docs/SURFACES.md`](docs/SURFACES.md)
 
@@ -107,6 +111,7 @@ repograph impact <symbol>
 Then, if needed:
 
 ```bash
+repograph sync --static-only
 repograph trace install
 pytest
 repograph sync
