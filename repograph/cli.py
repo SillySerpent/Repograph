@@ -33,11 +33,10 @@ app.add_typer(pathway_app, name="pathway")
 trace_app = typer.Typer(
     name="trace",
     help=(
-        "Dynamic analysis: instrument, collect call traces, overlay onto static graph.\n\n"
-        "  1. repograph trace install   — write conftest.py instrumentation\n"
-        "  2. pytest                    — run tests; traces → .repograph/runtime/\n"
-        "  3. repograph sync            — overlay fires automatically\n"
-        "  4. repograph trace report    — view dynamic findings"
+        "Dynamic analysis helpers for advanced/manual workflows.\n\n"
+        "Routine runtime overlay now happens automatically on [bold]repograph sync --full[/].\n"
+        "Use trace subcommands only when you want explicit control over instrumentation\n"
+        "or to inspect raw trace payloads under .repograph/runtime/."
     ),
 )
 app.add_typer(trace_app, name="trace")
@@ -159,13 +158,21 @@ def sync(
     full_with_tests: bool = typer.Option(
         False,
         "--full-with-tests",
+        hidden=True,
         help=(
-            "Full sync, then ``repograph trace install``, ``pytest tests``, "
-            "``repograph trace collect``, and incremental sync to merge JSONL traces "
-            "into the graph (runtime overlay). Implies a full index first."
+            "Deprecated alias for one-shot dynamic ``--full``."
         ),
     ),
-    full: bool = typer.Option(False, "--full", help="Force full re-index"),
+    full: bool = typer.Option(
+        False,
+        "--full",
+        help="Force a full rebuild and automatically run traced tests + runtime overlay when possible.",
+    ),
+    static_only: bool = typer.Option(
+        False,
+        "--static-only",
+        help="Force a full static-only rebuild with no automatic test execution. Implies --full.",
+    ),
     embeddings: bool = typer.Option(False, "--embeddings", help="Include vector embeddings"),
     no_git: bool = typer.Option(False, "--no-git", help="Skip git coupling phase"),
     strict: bool = typer.Option(
@@ -185,8 +192,9 @@ def sync(
 ):
     """Sync the repository index (incremental by default).
 
-    Use ``repograph sync --full`` for a full rebuild. Use ``--full-with-tests`` for
-    full index + pytest + runtime trace merge (see option help).
+    Use ``repograph sync --full`` for the canonical one-shot full rebuild
+    (static index + automatic dynamic analysis when test discovery succeeds).
+    Use ``repograph sync --static-only`` for a full static rebuild with no test run.
 
     A bare word ``full`` is not a flag — if you run ``repograph sync full``, Typer
     treats ``full`` as the repo *path* (usually wrong). We map that common mistake
@@ -196,6 +204,7 @@ def sync(
     from repograph.pipeline.runner import (
         RunConfig,
         run_full_pipeline,
+        run_full_pipeline_with_runtime_overlay,
         run_full_sync_with_tests,
         run_incremental_pipeline,
     )
@@ -212,8 +221,16 @@ def sync(
     root = os.path.abspath(path or os.getcwd())
     rg_dir = repograph_dir(root)
 
+    if static_only:
+        full = True
     if full_with_tests:
         full = True
+        if static_only:
+            console.print("[red]Error:[/] --static-only conflicts with deprecated --full-with-tests.")
+            raise typer.Exit(1)
+        console.print(
+            "[yellow]Warning:[/] [bold]--full-with-tests[/] is deprecated; use [bold]repograph sync --full[/]."
+        )
 
     if not is_initialized(root) and not full:
         console.print("[yellow]Not yet indexed. Running full sync...[/]")
@@ -245,14 +262,18 @@ def sync(
         raise typer.Exit(1)
 
     if full_with_tests:
-        console.print("[cyan]Running full sync with tests + trace merge...[/]")
+        console.print("[cyan]Running full sync with runtime overlay...[/]")
         stats = run_full_sync_with_tests(config)
         _print_stats(stats)
         return
 
     if full:
-        console.print("[cyan]Running full pipeline...[/]")
-        stats = run_full_pipeline(config)
+        if static_only:
+            console.print("[cyan]Running full static-only pipeline...[/]")
+            stats = run_full_pipeline(config)
+        else:
+            console.print("[cyan]Running full pipeline with automatic runtime overlay...[/]")
+            stats = run_full_pipeline_with_runtime_overlay(config)
     else:
         differ = IncrementalDiff(rg_dir)
         if differ.is_first_run():
@@ -2083,7 +2104,7 @@ def trace_install(
     include_pattern: str = typer.Option("", "--include", help="Regex include filter on 'file::qualified_name'."),
     exclude_pattern: str = typer.Option("", "--exclude", help="Regex exclude filter on 'file::qualified_name'."),
 ) -> None:
-    """Write instrumentation config so the next test run generates call traces.
+    """Write manual instrumentation config so the next Python/test run generates traces.
 
     Creates a conftest.py (or sitecustomize.py) at the repo root that activates
     sys.settrace tracing and writes JSONL traces to .repograph/runtime/.
@@ -2132,12 +2153,14 @@ def trace_install(
             console.print(f"[green]✓ Installed ({tracer.plugin_id()}):[/] {config_path}")
             console.print(f"  Traces will be written to: {result.get('trace_dir')}")
             console.print(
-                "\nNext steps:\n"
+                "\nManual next steps:\n"
                 "  1. Run your tests normally (e.g. [bold]pytest[/]) so JSONL appears under "
                 "[bold].repograph/runtime/[/]\n"
                 "  2. Then run [bold]repograph sync[/] to merge traces into [bold]graph.db[/] "
-                "(required — [bold]report[/] alone does not apply traces)\n"
-                "  3. Or run [bold]repograph trace report[/] to inspect overlay findings without a full sync"
+                "(required — [bold]repograph report[/] alone does not apply traces)\n"
+                "  3. Or run [bold]repograph trace report[/] to inspect overlay findings first\n\n"
+                "[dim]Routine users should prefer [bold]repograph sync --full[/], which now performs "
+                "automatic runtime overlay without writing tracer files.[/]"
             )
 
 
@@ -2210,7 +2233,7 @@ def trace_collect(
     console.print(f"\n[green]{len(files)} trace file(s), {total_lines:,} total records.[/]")
     console.print(
         "Run [bold]repograph sync[/] to merge traces into the graph (updates dead-code / "
-        "[bold]runtime_*[/] fields). [bold]repograph report full[/] only reads the existing index — "
+        "[bold]runtime_*[/] fields). [bold]repograph report[/] only reads the existing index — "
         "it does not consume new JSONL by itself."
     )
 

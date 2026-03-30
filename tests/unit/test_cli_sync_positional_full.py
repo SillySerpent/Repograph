@@ -38,7 +38,7 @@ def test_sync_positional_full_uses_cwd_not_subdir_full(uninitialized_repo):
     old_cwd = os.getcwd()
     try:
         os.chdir(repo)
-        with patch("repograph.pipeline.runner.run_full_pipeline", side_effect=capture):
+        with patch("repograph.pipeline.runner.run_full_pipeline_with_runtime_overlay", side_effect=capture):
             result = runner.invoke(app, ["sync", "full"])
     finally:
         os.chdir(old_cwd)
