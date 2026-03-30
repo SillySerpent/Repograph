@@ -110,6 +110,67 @@ def _runtime_dir_has_traces(repograph_dir: str) -> bool:
         return False
 
 
+def _clear_runtime_trace_dir(repograph_dir: str) -> None:
+    """Remove any stale runtime trace files before a new dynamic full sync."""
+    td = Path(repograph_dir) / "runtime"
+    if td.is_dir():
+        shutil.rmtree(td)
+    td.mkdir(parents=True, exist_ok=True)
+
+
+def _trace_inventory(repograph_dir: str) -> dict[str, int]:
+    """Return a small summary of trace files currently on disk."""
+    from repograph.runtime.trace_format import collect_trace_files
+
+    files = collect_trace_files(repograph_dir)
+    total_records = 0
+    for trace_file in files:
+        try:
+            with trace_file.open(encoding="utf-8", errors="replace") as fh:
+                total_records += sum(1 for _ in fh)
+        except OSError:
+            continue
+    return {
+        "trace_file_count": len(files),
+        "trace_record_count": total_records,
+    }
+
+
+def _repo_has_pytest_signal(repo_root: str) -> bool:
+    """True when ``pyproject.toml`` explicitly configures pytest."""
+    pyproject = Path(repo_root) / "pyproject.toml"
+    if not pyproject.is_file():
+        return False
+    try:
+        with pyproject.open("rb") as fh:
+            data = tomllib.load(fh)
+    except Exception:
+        return False
+    tool = data.get("tool")
+    if not isinstance(tool, dict):
+        return False
+    pytest_cfg = tool.get("pytest")
+    if not isinstance(pytest_cfg, dict):
+        return False
+    return "ini_options" in pytest_cfg
+
+
+def _resolve_sync_test_command(repo_root: str) -> tuple[list[str] | None, str | None]:
+    """Resolve the automatic dynamic-full test command."""
+    from repograph.config import load_sync_test_command
+
+    override = load_sync_test_command(repo_root)
+    if override:
+        return override, "config_override"
+
+    if _repo_has_pytest_signal(repo_root):
+        tests_dir = Path(repo_root) / "tests"
+        if tests_dir.is_dir():
+            return [sys.executable, "-m", "pytest", "tests"], "pyproject_tests_dir"
+        return [sys.executable, "-m", "pytest"], "pyproject"
+    return None, None
+
+
 # ---------------------------------------------------------------------------
 # RunConfig
 # ---------------------------------------------------------------------------
@@ -805,45 +866,216 @@ def run_incremental_pipeline(config: RunConfig) -> dict:
         shutdown_observability()
 
 
+def run_full_pipeline_with_runtime_overlay(
+    config: RunConfig,
+    *,
+    pytest_targets: list[str] | None = None,
+) -> dict:
+    """Run a full rebuild plus automatic traced tests in one command.
+
+    The dynamic phase is intentionally file-clean: no tracked ``conftest.py`` or
+    ``sitecustomize.py`` is written into the repository. Runtime traces are
+    collected via a temporary bootstrap and merged directly into the rebuilt DB.
+    """
+    from repograph.graph_store.store import _delete_db_dir
+    from repograph.pipeline.health import (
+        build_health_failure_report,
+        build_health_report,
+        write_health_json,
+    )
+    from repograph.pipeline.incremental import IncrementalDiff
+    from repograph.pipeline.sync_state import clear_sync_lock, write_sync_lock
+    from repograph.runtime.ephemeral import run_command_under_trace
+
+    _run_id = new_run_id()
+    _validate_run_config_paths(config)
+    init_observability(ObservabilityConfig(
+        log_dir=Path(config.repograph_dir) / "logs",
+        run_id=_run_id,
+    ))
+    set_obs_context(phase="full_sync_runtime_overlay")
+    _logger.info("full pipeline with runtime overlay started", repo_root=config.repo_root, run_id=_run_id)
+
+    write_sync_lock(config.repograph_dir, mode="full", repo_root=config.repo_root, phase="starting")
+    store: GraphStore | None = None
+    files: list[FileRecord] = []
+    parsed: list[ParsedFile] = []
+    last_stats: dict[str, int] | None = None
+    static_hook_summary: dict[str, Any] = {}
+    final_hook_summary: dict[str, Any] = {}
+    dynamic_analysis: dict[str, Any] = {
+        "requested": True,
+        "executed": False,
+        "resolution": "",
+        "test_command": [],
+        "skipped_reason": "",
+        "pytest_exit_code": None,
+        "trace_file_count": 0,
+        "trace_record_count": 0,
+        "overlay_persisted_functions": 0,
+        "dynamic_findings_count": 0,
+    }
+
+    try:
+        _clear_runtime_trace_dir(config.repograph_dir)
+
+        db_path = os.path.join(config.repograph_dir, "graph.db")
+        console.print("[cyan]Step 1/3: full static pipeline...[/]")
+        _delete_db_dir(db_path)
+        store = GraphStore(db_path)
+        store.initialize_schema()
+        with _phase_scope("dynamic_full.step1_static_rebuild"):
+            files, parsed = _run_full_build_steps(config, store)
+            _run_experimental_pipeline_phases(config, store, parsed)
+            static_hook_summary = _fire_hooks(
+                config,
+                store,
+                parsed,
+                run_graph_built=True,
+                run_dynamic=False,
+                run_evidence=False,
+                run_export=False,
+            )
+        IncrementalDiff(config.repograph_dir).save_index({fr.path: fr for fr in files})
+        last_stats = store.get_stats()
+        store.close()
+        store = None
+
+        if pytest_targets is not None:
+            test_command = [sys.executable, "-m", "pytest", *pytest_targets]
+            resolution = "deprecated_alias"
+        else:
+            test_command, resolution = _resolve_sync_test_command(config.repo_root)
+
+        dynamic_analysis["resolution"] = resolution or ""
+        dynamic_analysis["test_command"] = list(test_command or [])
+
+        if not test_command:
+            dynamic_analysis["skipped_reason"] = "no_pytest_signal"
+            console.print(
+                "[yellow]Dynamic analysis skipped:[/] no pytest configuration was detected in "
+                "[bold]pyproject.toml[/]. Add [bold]sync_test_command[/] to "
+                "[bold]repograph.index.yaml[/] to opt in."
+            )
+        else:
+            dynamic_analysis["executed"] = True
+            console.print(
+                f"[cyan]Step 2/3: {' '.join(test_command)}[/] "
+                "[dim](ephemeral tracing enabled)[/]"
+            )
+            with _phase_scope(
+                "dynamic_full.step2_traced_tests",
+                resolution=dynamic_analysis["resolution"],
+                command_len=len(test_command),
+            ):
+                result = run_command_under_trace(
+                    test_command,
+                    repo_root=config.repo_root,
+                    repograph_dir=config.repograph_dir,
+                    session_name="pytest",
+                )
+            dynamic_analysis["pytest_exit_code"] = int(result.returncode)
+            inventory = _trace_inventory(config.repograph_dir)
+            dynamic_analysis.update(inventory)
+            if inventory["trace_file_count"] > 0:
+                console.print(
+                    f"[green]{inventory['trace_file_count']} trace file(s), "
+                    f"{inventory['trace_record_count']:,} total records.[/]"
+                )
+            else:
+                console.print("[yellow]No runtime trace files were produced by the test command.[/]")
+            if result.returncode != 0:
+                msg = f"test command exited with code {result.returncode}"
+                if config.strict:
+                    raise RuntimeError(msg)
+                console.print(
+                    f"[yellow]{msg} — continuing with any collected traces "
+                    "(use [bold]--strict[/] on sync to abort on test failures)[/]"
+                )
+
+        console.print("[cyan]Step 3/3: finalizing evidence, exports, and runtime overlay...[/]")
+        store = GraphStore(db_path)
+        store.initialize_schema()
+        with _phase_scope(
+            "dynamic_full.step3_finalize_overlay",
+            trace_file_count=dynamic_analysis["trace_file_count"],
+        ):
+            final_hook_summary = _fire_hooks(
+                config,
+                store,
+                [],
+                run_graph_built=False,
+                run_dynamic=dynamic_analysis["trace_file_count"] > 0,
+                run_evidence=True,
+                run_export=True,
+            )
+        dynamic_analysis["dynamic_findings_count"] = int(
+            final_hook_summary.get("dynamic_findings_count") or 0
+        )
+        dynamic_analysis["overlay_persisted_functions"] = _count_valid_runtime_observations(store)
+        last_stats = store.get_stats()
+        sync_mode = "full_with_runtime_overlay" if dynamic_analysis["trace_file_count"] > 0 else "full"
+        write_health_json(
+            config.repograph_dir,
+            build_health_report(
+                store,
+                last_stats,
+                repo_root=config.repo_root,
+                repograph_dir=config.repograph_dir,
+                sync_mode=sync_mode,
+                files_walked=len(files),
+                strict=config.strict,
+                hook_summary=_merge_hook_summaries(static_hook_summary, final_hook_summary),
+                dynamic_analysis=dynamic_analysis,
+            ),
+        )
+        return last_stats
+
+    except BaseException as exc:
+        partial = last_stats
+        if partial is None and store is not None:
+            try:
+                partial = store.get_stats()
+            except Exception as stats_exc:
+                _logger.warning("store.get_stats() failed during error recovery", exc_msg=str(stats_exc))
+        error_phase = "tests" if dynamic_analysis.get("pytest_exit_code") not in (None, 0) else "pipeline"
+        try:
+            write_health_json(
+                config.repograph_dir,
+                build_health_failure_report(
+                    repo_root=config.repo_root,
+                    repograph_dir=config.repograph_dir,
+                    sync_mode="full_with_runtime_overlay" if dynamic_analysis.get("executed") else "full",
+                    error_phase=error_phase,
+                    error_message=f"{type(exc).__name__}: {exc}",
+                    strict=config.strict,
+                    partial_stats=partial,
+                    dynamic_analysis=dynamic_analysis,
+                ),
+            )
+        except Exception as health_exc:
+            _logger.warning("write_health_json failed during error recovery", exc_msg=str(health_exc))
+        _logger.error(
+            "full pipeline with runtime overlay failed",
+            exc_type=type(exc).__name__,
+            exc_msg=str(exc),
+        )
+        console.print(f"[red bold]Full sync failed:[/] {exc}")
+        raise
+    finally:
+        clear_sync_lock(config.repograph_dir)
+        if store is not None:
+            try:
+                store.close()
+            except Exception as close_exc:
+                _logger.warning("store.close() failed during cleanup", exc_msg=str(close_exc))
+        shutdown_observability()
+
+
 def run_full_sync_with_tests(
     config: RunConfig,
     *,
     pytest_targets: list[str] | None = None,
 ) -> dict:
-    """Full pipeline, trace install, pytest, trace collect, then incremental sync.
-
-    Used by ``repograph sync --full-with-tests``. Merges JSONL runtime traces into
-    the graph via :func:`run_incremental_pipeline` (including the trace-only
-    path when no source files changed).
-    """
-    root = config.repo_root
-    py = sys.executable
-    targets = pytest_targets if pytest_targets is not None else ["tests"]
-
-    console.print("[cyan]Step 1/4: full pipeline...[/]")
-    run_full_pipeline(config)
-
-    console.print("[cyan]Step 2/4: repograph trace install (pytest mode)...[/]")
-    r = subprocess.run(
-        [py, "-m", "repograph", "trace", "install", root],
-        cwd=root,
-    )
-    if r.returncode != 0:
-        console.print("[yellow]trace install failed; pytest may not emit JSONL traces.[/]")
-
-    console.print(f"[cyan]Step 3/4: pytest {' '.join(targets)}...[/]")
-    r = subprocess.run([py, "-m", "pytest", *targets], cwd=root)
-    if r.returncode != 0:
-        msg = f"pytest exited with code {r.returncode}"
-        if config.strict:
-            raise RuntimeError(msg)
-        console.print(
-            f"[yellow]{msg} — continuing to merge traces "
-            "(use [bold]--strict[/] on sync to abort on pytest failure)[/]"
-        )
-
-    console.print("[cyan]Step 3b: trace collect (summary)...[/]")
-    subprocess.run([py, "-m", "repograph", "trace", "collect", root], cwd=root)
-
-    console.print("[cyan]Step 4/4: incremental sync (merge runtime traces)...[/]")
-    return run_incremental_pipeline(config)
+    """Deprecated compatibility wrapper for the old ``--full-with-tests`` path."""
+    return run_full_pipeline_with_runtime_overlay(config, pytest_targets=pytest_targets)
