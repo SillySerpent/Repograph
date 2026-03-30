@@ -75,14 +75,14 @@ _VENDOR_DIR_NAMES: Final[frozenset[str]] = frozenset({
 
 
 def classify_path(file_path: str) -> str:
-    """Return one of: ``production``, ``test``, ``scripts``, ``vendor``, ``docs``.
+    """Return one of: ``production``, ``test``, ``examples``, ``scripts``, ``vendor``, ``docs``.
 
     Args:
         file_path: Repository-relative path using forward slashes.
 
     Returns:
-        Category string; first matching rule wins: test, docs, scripts, vendor,
-        then production.
+        Category string; first matching rule wins: test, docs, examples,
+        scripts, vendor, then production.
     """
     p = file_path.replace("\\", "/")
     lower = p.lower()
@@ -91,6 +91,8 @@ def classify_path(file_path: str) -> str:
         return "test"
     if _is_docs_path_raw(lower):
         return "docs"
+    if _is_examples_path_raw(lower):
+        return "examples"
     if SCRIPT_PATH_RE.search(p):
         return "scripts"
     if _has_vendor_segment(lower):
@@ -124,6 +126,15 @@ def _is_docs_path_raw(lower_path: str) -> bool:
         or lower_path.startswith("docs/")
         or "/documentation/" in lower_path
         or lower_path.startswith("documentation/")
+    )
+
+
+def _is_examples_path_raw(lower_path: str) -> bool:
+    return (
+        "/examples/" in lower_path
+        or lower_path.startswith("examples/")
+        or "/plugins/examples/" in lower_path
+        or lower_path.startswith("repograph/plugins/examples/")
     )
 
 
