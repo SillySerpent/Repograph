@@ -22,9 +22,10 @@ Usage
 """
 from __future__ import annotations
 
+import functools
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from repograph.config import DEFAULT_CONTEXT_TOKENS as _DEFAULT_CONTEXT_TOKENS
 from repograph.graph_store.store_queries_analytics import (
@@ -32,7 +33,12 @@ from repograph.graph_store.store_queries_analytics import (
     ENTRY_POINT_TEST_COVERAGE_DEFINITION,
 )
 from repograph.core.evidence import summarize_findings
-from repograph.observability import ObservableMixin
+from repograph.observability import (
+    ObservableMixin,
+    active_run_id,
+    ensure_observability_session,
+    shutdown_observability,
+)
 
 
 def _build_report_warnings(
@@ -49,6 +55,13 @@ def _build_report_warnings(
     if health.get("sync_mode") == "incremental_traces_only":
         warnings.append(
             "Report reflects a trace-only incremental refresh; run a full sync for a full static rebuild snapshot."
+        )
+    dyn = health.get("dynamic_analysis") or {}
+    if dyn.get("requested") and not dyn.get("executed"):
+        reason = str(dyn.get("skipped_reason") or "").strip() or "unspecified"
+        warnings.append(
+            "Dynamic analysis was requested for the last full sync but skipped "
+            f"({reason}). Add sync_test_command or pytest config if you want runtime overlay."
         )
     if health.get("status") == "degraded":
         warnings.append(
@@ -67,6 +80,58 @@ def _build_report_warnings(
             f"Config registry empty ({cfg_diag.get('status')}); inspect config_registry_diagnostics for scan details."
         )
     return warnings
+
+
+def _add_result_metadata(span_ctx: Any, result: Any) -> None:
+    """Attach small, non-sensitive result-shape metadata to a service span."""
+    if result is None:
+        span_ctx.add_metadata(result_found=False)
+        return
+    if isinstance(result, list):
+        span_ctx.add_metadata(result_count=len(result))
+        return
+    if isinstance(result, dict):
+        meta: dict[str, Any] = {"result_keys": len(result)}
+        if "error" in result:
+            meta["has_error"] = bool(result.get("error"))
+        if "initialized" in result:
+            meta["initialized"] = bool(result.get("initialized"))
+        span_ctx.add_metadata(**meta)
+        return
+    if isinstance(result, str):
+        span_ctx.add_metadata(result_len=len(result))
+
+
+def _observed_service_call(
+    operation: str,
+    *,
+    metadata_fn: Callable[..., dict[str, Any]] | None = None,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Wrap a public service method with an observability session and span."""
+
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        def wrapper(self: "RepoGraphService", *args: Any, **kwargs: Any) -> Any:
+            self._ensure_observability_session()
+            metadata: dict[str, Any] = {}
+            if metadata_fn is not None:
+                try:
+                    metadata = metadata_fn(self, *args, **kwargs) or {}
+                except Exception as exc:
+                    self.logger.warning(
+                        "service observability metadata failed",
+                        operation=operation,
+                        exc_type=type(exc).__name__,
+                        exc_msg=str(exc),
+                    )
+            with self.span(operation, **metadata) as span_ctx:
+                result = fn(self, *args, **kwargs)
+                _add_result_metadata(span_ctx, result)
+                return result
+
+        return wrapper
+
+    return decorator
 
 
 class RepoGraphService(ObservableMixin):
@@ -100,6 +165,25 @@ class RepoGraphService(ObservableMixin):
         self.include_git = include_git
 
         self._store: Any = None  # lazy-opened
+        self._owned_obs_run_id: str | None = None
+
+    def _ensure_observability_session(self) -> None:
+        """Start a read-session log sink when the caller has not already done so."""
+        started_run_id = ensure_observability_session(Path(self.repograph_dir) / "logs")
+        if started_run_id is not None:
+            self._owned_obs_run_id = started_run_id
+            self.logger.info(
+                "service observability session started",
+                repo_root=self.repo_path,
+                run_id=started_run_id,
+            )
+
+    def _shutdown_owned_observability_session(self) -> None:
+        """Stop the service-owned observability session, if it is still active."""
+        if self._owned_obs_run_id and active_run_id() == self._owned_obs_run_id:
+            self.logger.info("service observability session shutdown", run_id=self._owned_obs_run_id)
+            shutdown_observability()
+        self._owned_obs_run_id = None
 
     # ------------------------------------------------------------------
     # Core pipeline
@@ -164,6 +248,7 @@ class RepoGraphService(ObservableMixin):
     # Status / overview
     # ------------------------------------------------------------------
 
+    @_observed_service_call("service_status")
     def status(self) -> dict:
         """Return index health: node counts, pathway count, last-sync time, stale flags.
 
@@ -206,6 +291,7 @@ class RepoGraphService(ObservableMixin):
                 "error_message": h.get("error_message"),
                 "partial_completion": h.get("partial_completion"),
                 "hook_summary": h.get("hook_summary"),
+                "dynamic_analysis": h.get("dynamic_analysis") or {},
             }
 
         return stats
@@ -387,6 +473,13 @@ class RepoGraphService(ObservableMixin):
     # Pathways
     # ------------------------------------------------------------------
 
+    @_observed_service_call(
+        "service_pathways",
+        metadata_fn=lambda self, min_confidence=0.0, include_tests=False: {
+            "min_confidence": float(min_confidence),
+            "include_tests": bool(include_tests),
+        },
+    )
     def pathways(
         self,
         min_confidence: float = 0.0,
@@ -419,6 +512,10 @@ class RepoGraphService(ObservableMixin):
             key=lambda p: (-(p.get("importance_score") or 0.0), -(p.get("confidence") or 0.0)),
         )
 
+    @_observed_service_call(
+        "service_get_pathway",
+        metadata_fn=lambda self, name: {"pathway_name": name},
+    )
     def get_pathway(self, name: str) -> dict | None:
         """Return the full context document for a named pathway.
 
@@ -436,6 +533,10 @@ class RepoGraphService(ObservableMixin):
         store = self._get_store()
         return store.get_pathway(name)
 
+    @_observed_service_call(
+        "service_pathway_steps",
+        metadata_fn=lambda self, name: {"pathway_name": name},
+    )
     def pathway_steps(self, name: str) -> list[dict]:
         """Return ordered execution steps for a named pathway.
 
@@ -454,6 +555,10 @@ class RepoGraphService(ObservableMixin):
     # Node queries
     # ------------------------------------------------------------------
 
+    @_observed_service_call(
+        "service_node",
+        metadata_fn=lambda self, identifier: {"identifier_len": len(identifier or "")},
+    )
     def node(self, identifier: str) -> dict | None:
         """Return structured data for a file path or qualified symbol name.
 
@@ -498,6 +603,7 @@ class RepoGraphService(ObservableMixin):
 
         return None
 
+    @_observed_service_call("service_get_all_files")
     def get_all_files(self) -> list[dict]:
         """Return all indexed files with their metadata.
 
@@ -512,6 +618,10 @@ class RepoGraphService(ObservableMixin):
     # Entry points & dead code
     # ------------------------------------------------------------------
 
+    @_observed_service_call(
+        "service_entry_points",
+        metadata_fn=lambda self, limit=20: {"limit": int(limit)},
+    )
     def entry_points(self, limit: int = 20) -> list[dict]:
         """Return the top entry points scored by the pathway scorer.
 
@@ -524,6 +634,10 @@ class RepoGraphService(ObservableMixin):
         """
         return self._get_store().get_entry_points(limit=limit)
 
+    @_observed_service_call(
+        "service_dead_code",
+        metadata_fn=lambda self, min_tier="probably_dead": {"min_tier": min_tier},
+    )
     def dead_code(self, min_tier: str = "probably_dead") -> list[dict]:
         """Return symbols detected as unreachable, filtered by confidence tier.
 
@@ -554,6 +668,10 @@ class RepoGraphService(ObservableMixin):
         """
         return self._get_store().get_dead_functions(min_tier=min_tier)
 
+    @_observed_service_call(
+        "service_duplicates",
+        metadata_fn=lambda self, min_severity="medium": {"min_severity": min_severity},
+    )
     def duplicates(self, min_severity: str = "medium") -> list[dict]:
         """Return groups of symbols that appear to be duplicated across files.
 
@@ -586,6 +704,13 @@ class RepoGraphService(ObservableMixin):
 
     _DOC_WARN_SEV_RANK = {"high": 0, "medium": 1, "low": 2}
 
+    @_observed_service_call(
+        "service_doc_warnings",
+        metadata_fn=lambda self, severity=None, min_severity=None: {
+            "severity": severity or "",
+            "min_severity": min_severity or "",
+        },
+    )
     def doc_warnings(
         self,
         severity: str | None = None,
@@ -625,6 +750,13 @@ class RepoGraphService(ObservableMixin):
     # Impact / blast radius
     # ------------------------------------------------------------------
 
+    @_observed_service_call(
+        "service_impact",
+        metadata_fn=lambda self, symbol, depth=3: {
+            "symbol_len": len(symbol or ""),
+            "depth": int(depth),
+        },
+    )
     def impact(self, symbol: str, depth: int = 3) -> dict:
         """Return **static** call-graph neighbours for a symbol (approximate blast radius).
 
@@ -715,6 +847,13 @@ class RepoGraphService(ObservableMixin):
     # Search
     # ------------------------------------------------------------------
 
+    @_observed_service_call(
+        "service_search",
+        metadata_fn=lambda self, query, limit=10: {
+            "query_len": len(query or ""),
+            "limit": int(limit),
+        },
+    )
     def search(self, query: str, limit: int = 10) -> list[dict]:
         """Search for symbols by name (fuzzy substring match).
 
@@ -754,6 +893,7 @@ class RepoGraphService(ObservableMixin):
     # Module index
     # ------------------------------------------------------------------
 
+    @_observed_service_call("service_modules")
     def modules(self) -> list[dict]:
         """Return the per-directory module index built by Phase 16.
 
@@ -785,6 +925,10 @@ class RepoGraphService(ObservableMixin):
         except Exception:
             return []
 
+    @_observed_service_call(
+        "service_config_registry",
+        metadata_fn=lambda self, key=None: {"has_key_filter": key is not None},
+    )
     def config_registry(self, key: str | None = None) -> dict:
         """Return the global config-key → consumer mapping built by Phase 17.
 
@@ -816,6 +960,7 @@ class RepoGraphService(ObservableMixin):
         except Exception:
             return {}
 
+    @_observed_service_call("service_config_registry_diagnostics")
     def config_registry_diagnostics(self) -> dict:
         """Return exporter diagnostics for config_registry generation."""
         import json as _json
@@ -830,6 +975,7 @@ class RepoGraphService(ObservableMixin):
         except Exception:
             return {}
 
+    @_observed_service_call("service_test_coverage")
     def test_coverage(self) -> list[dict]:
         """Return per-file *entry-point test reachability* (not line coverage).
 
@@ -845,6 +991,7 @@ class RepoGraphService(ObservableMixin):
         """
         return self._get_store().get_test_coverage_map()
 
+    @_observed_service_call("service_test_coverage_any_call")
     def test_coverage_any_call(self) -> list[dict]:
         """Per-file share of non-test functions with a test caller (any CALLS edge).
 
@@ -864,6 +1011,13 @@ class RepoGraphService(ObservableMixin):
         """Short explanation of :meth:`test_coverage_any_call`."""
         return ANY_CALL_TEST_COVERAGE_DEFINITION
 
+    @_observed_service_call(
+        "service_invariants",
+        metadata_fn=lambda self, inv_type=None, file_path=None: {
+            "has_inv_type_filter": inv_type is not None,
+            "has_file_filter": file_path is not None,
+        },
+    )
     def invariants(
         self,
         inv_type: str | None = None,
@@ -907,24 +1061,35 @@ class RepoGraphService(ObservableMixin):
     # Event topology, async tasks, interface map, constructor deps
     # ------------------------------------------------------------------
 
+    @_observed_service_call("service_event_topology")
     def event_topology(self) -> list[dict]:
         """Return heuristic event-bus call sites (Phase 19 JSON)."""
         return self._get_store().get_event_topology()
 
+    @_observed_service_call("service_async_tasks")
     def async_tasks(self) -> list[dict]:
         """Return asyncio task spawn records (Phase 20 JSON)."""
         return self._get_store().get_async_tasks()
 
+    @_observed_service_call("service_interface_map")
     def interface_map(self) -> list[dict]:
         """Return inheritance-based interface → implementations map."""
         from repograph.plugins.static_analyzers.interface_map.plugin import get_interface_map
 
         return get_interface_map(self._get_store())
 
+    @_observed_service_call(
+        "service_constructor_deps",
+        metadata_fn=lambda self, class_name, depth=2: {
+            "class_name_len": len(class_name or ""),
+            "depth": int(depth),
+        },
+    )
     def constructor_deps(self, class_name: str, depth: int = 2) -> dict:
         """Return ``__init__`` parameter names for a class."""
         return self._get_store().get_constructor_deps(class_name, depth=depth)
 
+    @_observed_service_call("service_communities")
     def communities(self) -> list[dict]:
         """Return all detected communities (module clusters).
 
@@ -946,6 +1111,13 @@ class RepoGraphService(ObservableMixin):
     # Raw Cypher
     # ------------------------------------------------------------------
 
+    @_observed_service_call(
+        "service_query",
+        metadata_fn=lambda self, cypher, params=None: {
+            "cypher_len": len(cypher or ""),
+            "param_count": len(params or {}),
+        },
+    )
     def query(self, cypher: str, params: dict | None = None) -> list[list]:
         """Execute a raw Cypher query against the graph database.
 
@@ -975,14 +1147,23 @@ class RepoGraphService(ObservableMixin):
         if self._store is None:
             from repograph.graph_store.store import GraphStore
             db = os.path.join(self.repograph_dir, "graph.db")
-            self._store = GraphStore(db)
-            self._store.initialize_schema()
+            with self.span("service_open_store", db_path=db):
+                self._store = GraphStore(db)
+                self._store.prepare_read_state()
+            self.logger.debug("service store opened", db_path=db)
         return self._store
 
     # ------------------------------------------------------------------
     # Full report — single call, all intelligence
     # ------------------------------------------------------------------
 
+    @_observed_service_call(
+        "service_full_report",
+        metadata_fn=lambda self, max_pathways=10, max_dead=20: {
+            "max_pathways": int(max_pathways),
+            "max_dead": int(max_dead),
+        },
+    )
     def full_report(self, max_pathways: int = 10, max_dead: int = 20) -> dict:
         """Return every piece of intelligence the tool can provide in one call.
 
@@ -1155,6 +1336,18 @@ class RepoGraphService(ObservableMixin):
             },
             "health": health,
             "stats": stats,
+            "count_semantics": {
+                "functions": (
+                    "Reported function counts exclude internal is_module_caller sentinel nodes."
+                ),
+                "pathways": (
+                    "Default pathway/report views exclude auto_detected_test pathways unless include_tests=True."
+                ),
+            },
+            "sync_semantics": {
+                "dynamic_analysis": health.get("dynamic_analysis") or {},
+                "coverage_metric": "entry_point_reachability_not_line_coverage",
+            },
             "purpose": purpose,
             "modules": mods,
             "entry_points": eps,
@@ -1195,6 +1388,10 @@ class RepoGraphService(ObservableMixin):
             "report_warnings": report_warnings,
         }
 
+    @_observed_service_call(
+        "service_pathway_document",
+        metadata_fn=lambda self, name: {"pathway_name": name},
+    )
     def pathway_document(self, name: str) -> str | None:
         """Return the full context document for a pathway, generating it on demand."""
         store = self._get_store()
@@ -1207,6 +1404,13 @@ class RepoGraphService(ObservableMixin):
             ctx = generate_pathway_context(pathway["id"], store)
         return ctx or None
 
+    @_observed_service_call(
+        "service_dependents",
+        metadata_fn=lambda self, symbol, depth=3: {
+            "symbol_len": len(symbol or ""),
+            "depth": int(depth),
+        },
+    )
     def dependents(self, symbol: str, depth: int = 3) -> dict:
         """Return direct/transitive callers grouped by depth."""
         store = self._get_store()
@@ -1229,6 +1433,13 @@ class RepoGraphService(ObservableMixin):
                     queue.append((c["id"], cur_depth + 1))
         return {"symbol": symbol, "dependents_by_depth": levels}
 
+    @_observed_service_call(
+        "service_dependencies",
+        metadata_fn=lambda self, symbol, depth=3: {
+            "symbol_len": len(symbol or ""),
+            "depth": int(depth),
+        },
+    )
     def dependencies(self, symbol: str, depth: int = 3) -> dict:
         """Return transitive callees grouped by depth."""
         store = self._get_store()
@@ -1251,6 +1462,10 @@ class RepoGraphService(ObservableMixin):
                     queue.append((c["id"], cur_depth + 1))
         return {"symbol": symbol, "dependencies_by_depth": levels}
 
+    @_observed_service_call(
+        "service_trace_variable",
+        metadata_fn=lambda self, variable_name: {"variable_name_len": len(variable_name or "")},
+    )
     def trace_variable(self, variable_name: str) -> dict:
         """Trace occurrences and FLOWS_INTO edges for a variable name."""
         store = self._get_store()
@@ -1290,8 +1505,10 @@ class RepoGraphService(ObservableMixin):
     def close(self) -> None:
         """Explicitly close the database connection."""
         if self._store is not None:
-            self._store.close()
-            self._store = None
+            with self.span("service_close_store"):
+                self._store.close()
+                self._store = None
+        self._shutdown_owned_observability_session()
 
     # ------------------------------------------------------------------
     # Observability log access
@@ -1300,6 +1517,7 @@ class RepoGraphService(ObservableMixin):
     def _log_dir(self) -> Path:
         return Path(self.repograph_dir) / "logs"
 
+    @_observed_service_call("service_list_log_sessions")
     def list_log_sessions(self) -> list[dict]:
         """List available log sessions with run_id, timestamp, and record counts.
 
@@ -1328,6 +1546,14 @@ class RepoGraphService(ObservableMixin):
             })
         return sessions
 
+    @_observed_service_call(
+        "service_get_log_session",
+        metadata_fn=lambda self, run_id=None, subsystem=None, limit=500: {
+            "has_run_id": run_id is not None,
+            "subsystem": subsystem or "",
+            "limit": int(limit),
+        },
+    )
     def get_log_session(
         self,
         run_id: str | None = None,
@@ -1361,6 +1587,13 @@ class RepoGraphService(ObservableMixin):
                     pass
         return records[-limit:]
 
+    @_observed_service_call(
+        "service_get_recent_errors",
+        metadata_fn=lambda self, run_id=None, limit=50: {
+            "has_run_id": run_id is not None,
+            "limit": int(limit),
+        },
+    )
     def get_recent_errors(self, run_id: str | None = None, limit: int = 50) -> list[dict]:
         """Return the most recent ERROR and CRITICAL records."""
         import json
@@ -1437,6 +1670,7 @@ class RepoGraphService(ObservableMixin):
 
     # Context manager support
     def __enter__(self) -> "RepoGraphService":
+        self._ensure_observability_session()
         return self
 
     def __exit__(self, *_) -> None:
