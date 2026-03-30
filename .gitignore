@@ -31,3 +31,6 @@ build/
 dist/
 *.egg-info/
 conftest.py
+
+.claude
+MagicMock
