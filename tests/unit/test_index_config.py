@@ -8,6 +8,7 @@ import yaml
 from repograph.config import (
     INDEX_CONFIG_FILENAME,
     load_extra_exclude_dirs,
+    load_sync_test_command,
     repograph_dir,
 )
 from repograph.plugins.static_analyzers.pathways.curator import PathwayCurator
@@ -82,3 +83,17 @@ def test_pathway_curator_prefers_dot_repograph(tmp_path) -> None:
     c = PathwayCurator(str(tmp_path))
     assert c.get("only_here") is not None
     assert c.get("legacy") is None
+
+
+def test_load_sync_test_command_prefers_dot_repograph(tmp_path) -> None:
+    rg = tmp_path / ".repograph"
+    rg.mkdir()
+    (rg / INDEX_CONFIG_FILENAME).write_text(
+        yaml.safe_dump({"sync_test_command": ["python", "-m", "pytest", "tests"]}),
+        encoding="utf-8",
+    )
+    (tmp_path / INDEX_CONFIG_FILENAME).write_text(
+        yaml.safe_dump({"sync_test_command": ["pytest"]}),
+        encoding="utf-8",
+    )
+    assert load_sync_test_command(str(tmp_path)) == ["python", "-m", "pytest", "tests"]

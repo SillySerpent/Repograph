@@ -22,6 +22,14 @@ INDEX_YAML_SCHEMA: dict = {
             "type": "boolean",
             "description": "When true, Phase 15 flags unknown qualified symbol references.",
         },
+        "sync_test_command": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Exact argv to run for dynamic full sync test execution, e.g. "
+                "[\"python\", \"-m\", \"pytest\", \"tests\"]."
+            ),
+        },
     },
     # Allow additional keys so forward-compatible configs don't hard-fail,
     # but we warn on them in the validation helper below.
