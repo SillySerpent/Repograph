@@ -15,6 +15,30 @@ import os
 
 from repograph.observability import get_logger
 
+__all__ = [
+    # Constants
+    "REPOGRAPH_DIR",
+    "INDEX_CONFIG_FILENAME",
+    "DB_FILENAME",
+    "DEFAULT_CONTEXT_TOKENS",
+    "DEFAULT_GIT_DAYS",
+    "DEFAULT_ENTRY_POINT_LIMIT",
+    "DEFAULT_MIN_COMMUNITY_SIZE",
+    "DEFAULT_MODULE_EXPANSION_THRESHOLD",
+    "ERROR_TRUNCATION_CHARS",
+    "AGENT_GUIDE_MAX_FILE_READ_BYTES",
+    "PREFETCH_CHUNK_SIZE",
+    "LANGUAGE_EXTENSIONS",
+    # Functions
+    "repograph_dir",
+    "db_path",
+    "get_repo_root",
+    "is_initialized",
+    "load_extra_exclude_dirs",
+    "load_doc_symbol_options",
+    "load_sync_test_command",
+]
+
 _logger = get_logger(__name__, subsystem="config")
 
 REPOGRAPH_DIR = ".repograph"
@@ -198,3 +222,26 @@ def load_doc_symbol_options(repo_root: str) -> dict:
         if v is True:
             flag_unknown = True
     return {"doc_symbols_flag_unknown": flag_unknown}
+
+
+def load_sync_test_command(repo_root: str) -> list[str] | None:
+    """Return the repo-local ``sync_test_command`` override, if present.
+
+    The preferred ``.repograph/repograph.index.yaml`` takes precedence over the
+    legacy repo-root config.
+    """
+    paths = (
+        os.path.join(repograph_dir(repo_root), INDEX_CONFIG_FILENAME),
+        os.path.join(repo_root, INDEX_CONFIG_FILENAME),
+    )
+    for path in paths:
+        data = _read_index_yaml(path)
+        if not data:
+            continue
+        raw = data.get("sync_test_command")
+        if not isinstance(raw, list):
+            continue
+        cmd = [str(item).strip() for item in raw if str(item).strip()]
+        if cmd:
+            return cmd
+    return None

@@ -60,7 +60,23 @@ The doctor checks:
 - writable `.repograph/` location for the target repo
 - database openability when an index already exists
 
-## Runtime trace tuning
+## First sync
+
+For routine local use, the canonical first full build is:
+
+```bash
+repograph sync --full
+```
+
+This performs a full static rebuild and, when pytest discovery succeeds, also
+runs traced tests and merges runtime observations into the same index. Use
+`repograph sync --static-only` when you explicitly want a pure static rebuild.
+
+## Runtime trace tuning (advanced/manual)
+
+`repograph sync --full` is the default dynamic-analysis path. Use the `trace`
+subcommands below only when you want manual control over instrumentation or
+trace collection.
 
 If trace files get too large, install tracing with bounds and sampling:
 
@@ -78,4 +94,15 @@ Inspect collected volume before sync:
 
 ```bash
 repograph trace collect --json
+```
+
+To override the automatic full-sync test command for a repo, add this to
+`.repograph/repograph.index.yaml` (or the legacy repo-root `repograph.index.yaml`):
+
+```yaml
+sync_test_command:
+  - python
+  - -m
+  - pytest
+  - tests
 ```

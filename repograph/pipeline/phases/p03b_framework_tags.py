@@ -10,7 +10,7 @@ be skipped or replaced independently.
 """
 from __future__ import annotations
 
-from repograph.core.models import ParsedFile
+from repograph.core.models import NodeID, ParsedFile
 from repograph.graph_store.store import GraphStore
 from repograph.observability import get_logger
 
@@ -67,13 +67,14 @@ def run(parsed: list[ParsedFile], store: GraphStore) -> None:
             page_components: list[str] = artifact.get("page_components") or []
             if page_components and pf.file_record:
                 # Page components in JS/TS are file-level — tag the file's layer.
+                file_id = NodeID.make_file_id(pf.file_record.path)
                 try:
-                    store.update_file_layer(pf.file_record.id, layer="ui")
+                    store.update_file_layer(file_id, layer="ui")
                 except Exception:
                     _logger.debug(
                         "p03b: could not update file layer",
                         plugin_id=plugin_id,
-                        file_id=pf.file_record.id,
+                        file_id=file_id,
                     )
 
     _logger.debug("p03b: tagged functions via framework adapters", count=tagged)

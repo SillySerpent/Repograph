@@ -8,6 +8,10 @@ repograph <command> [PATH] [OPTIONS]
 
 `PATH` defaults to the current working directory when omitted.
 
+Read/query commands also emit structured observability sessions under
+`.repograph/logs/`. `sync` creates its own pipeline session; short direct
+commands such as `status` and `doctor` create shorter command sessions.
+
 ### Interactive menu: CLI command browser
 
 `repograph menu` (or `python -m repograph.entry menu`) opens the text UI. The **first option** is **CLI command browser**: it lists every Typer command in categories, explains what each does and common flags (more narrative than `repograph --help` alone), shows examples, and can **Run…** a command for the current repo with **default args**, **named presets** (for example `clean --dev -y`, or `report --pathways 25`), or **custom flags** you type (parsed like a shell). Under each preset, plain-language text explains what that choice does for someone not used to CLI flags; you can still print **`repograph <cmd> --help`** for the full machine-readable flag list.
@@ -17,7 +21,8 @@ repograph <command> [PATH] [OPTIONS]
 ## `repograph init`
 
 Initialize RepoGraph in a repository.  Creates the `.repograph/` directory
-structure.  Must be run (or `sync` used directly) before any other command.
+structure. It is optional convenience only — `repograph sync` can bootstrap the
+index directly.
 
 ```
 repograph init [PATH] [--force]
@@ -39,13 +44,19 @@ repograph sync [PATH] [OPTIONS]
 
 | Flag | Description |
 |------|-------------|
-| `--full` | Force complete rebuild from scratch |
+| `--full` | Canonical one-shot full rebuild: rebuild static index, auto-run traced tests when available, then merge runtime overlay |
+| `--static-only` | Force complete rebuild from scratch with **no** automatic test execution |
 | `--embeddings` | Generate vector embeddings (requires `sentence-transformers`) |
 | `--no-git` | Skip git co-change coupling phase (Phase 12) |
 | `--strict` | Fail sync if any optional phase errors |
 | `--continue-on-error / --no-continue-on-error` | Control optional-phase failure behaviour |
 | `--include-tests-config-registry` | Include test files when building `config_registry.json` |
-| `--full-with-tests` | Run full sync, install tracer, run `pytest tests`, collect traces, then merge runtime overlay |
+
+Automatic dynamic-analysis command resolution for `--full`:
+1. `sync_test_command` from `repograph.index.yaml`, if present
+2. `python -m pytest tests` when `pyproject.toml` configures pytest and `tests/` exists
+3. `python -m pytest` when `pyproject.toml` configures pytest without a `tests/` directory
+4. otherwise the full rebuild completes statically and health/report metadata record that dynamic analysis was skipped
 
 ---
 
@@ -88,7 +99,7 @@ repograph report [PATH] [--json] [--full] [--pathways N] [--dead N]
 Pathway `context_doc` values include an **INTERPRETATION** section: steps follow
 BFS over `CALLS` edges, not guaranteed runtime order.
 
-`report --json` now includes capped-surface metadata (`pathways_summary`, `communities_summary`) and may include `report_warnings` (for example when the latest sync mode is `incremental_traces_only` or health is `degraded`).
+`report --json` includes capped-surface metadata (`pathways_summary`, `communities_summary`), count-semantics metadata, and may include `report_warnings` (for example when the latest sync mode is `incremental_traces_only`, dynamic analysis was skipped, or health is `degraded`).
 
 ---
 
@@ -252,6 +263,8 @@ Health status values:
 ## `repograph trace install`
 
 Install runtime tracing instrumentation for the next test/run session.
+This is now an **advanced/manual** workflow; routine runtime overlay happens on
+`repograph sync --full`.
 
 ```
 repograph trace install [PATH] [OPTIONS]
@@ -271,7 +284,8 @@ repograph trace install [PATH] [OPTIONS]
 
 ## `repograph trace collect`
 
-List collected traces under `.repograph/runtime/`.
+List collected traces under `.repograph/runtime/`. This is read-only; it does
+not merge anything into the graph.
 
 ```
 repograph trace collect [PATH] [--json]
@@ -285,7 +299,7 @@ repograph trace collect [PATH] [--json]
 
 ## `repograph trace report`
 
-Summarize runtime overlay diagnostics and persistence impact.
+Summarize runtime overlay diagnostics for collected traces.
 
 ```
 repograph trace report [PATH] [--top N] [--json]

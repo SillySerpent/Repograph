@@ -31,3 +31,24 @@ def test_build_report_warnings_empty_when_no_issues() -> None:
         cfg_diag={},
     )
     assert ws == []
+
+
+def test_build_report_warnings_includes_dynamic_skip() -> None:
+    ws = _build_report_warnings(
+        health={
+            "sync_mode": "full",
+            "status": "ok",
+            "dynamic_analysis": {
+                "requested": True,
+                "executed": False,
+                "skipped_reason": "no_pytest_signal",
+            },
+        },
+        pathways_total=1,
+        pathways_shown=1,
+        communities_total=1,
+        communities_shown=1,
+        cfg_top={"a": {"usage_count": 1}},
+        cfg_diag={},
+    )
+    assert any("Dynamic analysis was requested" in w for w in ws)

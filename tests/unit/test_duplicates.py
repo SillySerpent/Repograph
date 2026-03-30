@@ -25,6 +25,29 @@ def _open_store(rg_dir: str):
 class TestDuplicateDetectionLogic:
     """Unit tests against the detection logic directly (no full pipeline)."""
 
+    def test_plugin_contract_functions_are_skipped(self):
+        from repograph.plugins.static_analyzers.duplicates.plugin import _find_medium_severity
+
+        rows = _find_medium_severity([
+            {
+                "id": "a",
+                "name": "build_plugin",
+                "qualified_name": "build_plugin",
+                "signature": "()",
+                "file_path": "repograph/plugins/exporters/a/plugin.py",
+                "is_dead": False,
+            },
+            {
+                "id": "b",
+                "name": "build_plugin",
+                "qualified_name": "build_plugin",
+                "signature": "()",
+                "file_path": "repograph/plugins/exporters/b/plugin.py",
+                "is_dead": False,
+            },
+        ])
+        assert rows == []
+
     def test_identical_body_hash_high_different_hash_medium(self):
         from repograph.plugins.static_analyzers.duplicates.plugin import _find_high_severity
 

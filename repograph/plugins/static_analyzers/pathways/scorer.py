@@ -32,6 +32,8 @@ _ABC_IMPL_MULT = 2.5   # boost for concrete implementations of abstract methods 
 _SCRIPT_DEMOTE = 0.1   # 10× penalty for script/diagnostic paths
 # Single-leading-underscore helpers (_foo) are internal; demote vs public entry points.
 _PRIVATE_NAME_DEMOTE = 0.35
+_RESOURCE_LIFECYCLE_DEMOTE = 0.1
+_RESOURCE_LIFECYCLE_NAMES = frozenset({"close", "shutdown", "teardown", "dispose"})
 _MIN_SCORE = 0.5
 
 
@@ -97,6 +99,7 @@ def score_function_verbose(
                               zeroed_reason="test_function")
 
     name: str = fn.get("name", "") or ""
+    qualified_name: str = fn.get("qualified_name", "") or ""
     decorators: list[str] = fn.get("decorators") or []
     is_exported: bool = fn.get("is_exported", False)
 
@@ -141,6 +144,15 @@ def score_function_verbose(
     if abc_implementor:
         score *= _ABC_IMPL_MULT
         applied.append(("abc_impl", _ABC_IMPL_MULT))
+
+    if (
+        name in _RESOURCE_LIFECYCLE_NAMES
+        and "." in qualified_name
+        and not is_exported
+        and not decorators
+    ):
+        score *= _RESOURCE_LIFECYCLE_DEMOTE
+        applied.append(("resource_lifecycle_demote", _RESOURCE_LIFECYCLE_DEMOTE))
 
     if name.startswith("_") and not name.startswith("__"):
         score *= _PRIVATE_NAME_DEMOTE

@@ -18,9 +18,23 @@ Adding a new **built-in** plugin:
 
 ## Entry points (optional, third-party)
 
-Packaged extensions may register via setuptools **entry points** (group names are
-reserved for future use; see `load_optional_entry_point_plugins` in `discovery.py`).
-In-tree plugins use filesystem discovery only.
+`discovery.py` exposes `load_optional_entry_point_plugins(group, register)` for loading
+third-party plugins packaged as setuptools entry points. This function is **not** called
+automatically during the default plugin registration — it must be called explicitly by
+the host application:
+
+```python
+from repograph.plugins.discovery import load_optional_entry_point_plugins
+from repograph.core.plugin_framework.hooks import PluginHookScheduler
+
+scheduler = PluginHookScheduler()
+load_optional_entry_point_plugins(
+    group="repograph.plugins",
+    register=scheduler.register_plugin,
+)
+```
+
+In-tree (built-in) plugins use filesystem discovery only.
 
 ## Special cases
 

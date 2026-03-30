@@ -50,6 +50,8 @@ pip install -e ".[dev,community,mcp,embeddings]"
 
 See **[`tests/README.md`](tests/README.md)** for markers (``integration``, ``dynamic``,
 ``requires_mcp``, etc.), optional session tracing, and layout.
+For config ownership and generated `.repograph` artifact boundaries, see
+[`docs/CONFIG_HYGIENE.md`](docs/CONFIG_HYGIENE.md).
 
 ```bash
 # All tests

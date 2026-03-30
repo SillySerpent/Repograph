@@ -19,6 +19,7 @@ venv/
 *.db
 *.sqlite
 *.sqlite3
+MagicMock/
 
 # OS/editor junk
 .DS_Store
@@ -30,7 +31,14 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
-conftest.py
+/conftest.py
+.repograph
 
-.claude
-MagicMock
+
+.env
+env
+.claude/
+claude
+.cursor
+cursor
+report.json

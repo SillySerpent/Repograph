@@ -21,6 +21,7 @@ def build_health_report(
     files_walked: int | None = None,
     strict: bool = False,
     hook_summary: dict[str, Any] | None = None,
+    dynamic_analysis: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Collect post-sync diagnostic counters (best-effort, never raises)."""
     report: dict[str, Any] = {
@@ -63,6 +64,7 @@ def build_health_report(
         "failed": hs.get("failed") or [],
         "warnings_count": int(hs.get("warnings_count") or 0),
     }
+    report["dynamic_analysis"] = dict(dynamic_analysis or {})
     report["partial_completion"] = failed > 0
     if failed > 0:
         report["status"] = "degraded"
@@ -78,6 +80,7 @@ def build_health_failure_report(
     error_message: str,
     strict: bool = False,
     partial_stats: dict[str, int] | None = None,
+    dynamic_analysis: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist a loud failure marker after a pipeline or phase crash."""
     return {
@@ -92,6 +95,7 @@ def build_health_failure_report(
         "strict": strict,
         "call_edges_total": None,
         "call_edges_by_reason": None,
+        "dynamic_analysis": dict(dynamic_analysis or {}),
     }
 
 

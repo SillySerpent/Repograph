@@ -25,14 +25,20 @@ def create_server(service: RepoGraphService, *, port: int | None = None):
 
     mcp = FastMCP("repograph", port=port if port is not None else 8000)
 
+    def _log_tool_call(tool: str, **metadata) -> None:
+        service._ensure_observability_session()
+        _logger.info("mcp tool invoked", tool=tool, **metadata)
+
     @mcp.tool()
     def list_pathways() -> list[dict]:
         """Return all pathway names, descriptions, and confidence scores."""
+        _log_tool_call("list_pathways")
         return service.pathways(min_confidence=0.0, include_tests=True)
 
     @mcp.tool()
     def get_pathway(name: str) -> str:
         """Return the full preformatted context document for a named pathway."""
+        _log_tool_call("get_pathway", pathway_name=name)
         ctx = service.pathway_document(name)
         if ctx is None:
             return f"Pathway '{name}' not found. Call list_pathways() to see available pathways."
@@ -41,26 +47,31 @@ def create_server(service: RepoGraphService, *, port: int | None = None):
     @mcp.tool()
     def get_node(identifier: str) -> dict:
         """Return structured data for a file path or qualified symbol name."""
+        _log_tool_call("get_node", identifier_len=len(identifier))
         return service.node(identifier) or {"error": f"No node found for '{identifier}'"}
 
     @mcp.tool()
     def get_dependents(symbol: str, depth: int = 3) -> dict:
         """Return all functions that directly or transitively call this symbol."""
+        _log_tool_call("get_dependents", symbol_len=len(symbol), depth=int(depth))
         return service.dependents(symbol, depth=depth)
 
     @mcp.tool()
     def get_dependencies(symbol: str, depth: int = 3) -> dict:
         """Return all functions this symbol calls, transitively."""
+        _log_tool_call("get_dependencies", symbol_len=len(symbol), depth=int(depth))
         return service.dependencies(symbol, depth=depth)
 
     @mcp.tool()
     def search(query: str, limit: int = 10) -> list[dict]:
         """Search by concept, keyword, or symbol name."""
+        _log_tool_call("search", query_len=len(query), limit=int(limit))
         return service.search(query, limit=limit)
 
     @mcp.tool()
     def impact(symbol: str, min_confidence: float = 0.5) -> dict:
         """Return blast-radius style data with stable keys: will_break, may_break, warnings."""
+        _log_tool_call("impact", symbol_len=len(symbol), min_confidence=float(min_confidence))
         data = service.impact(symbol)
         if data.get("error"):
             return {
@@ -90,24 +101,29 @@ def create_server(service: RepoGraphService, *, port: int | None = None):
     @mcp.tool()
     def trace_variable(variable_name: str) -> dict:
         """Trace how a named variable flows through the graph (variables + FLOWS_INTO edges)."""
+        _log_tool_call("trace_variable", variable_name_len=len(variable_name))
         return service.trace_variable(variable_name)
 
     @mcp.tool()
     def get_entry_points(limit: int = 20) -> list[dict]:
         """Return the top entry points by score."""
+        _log_tool_call("get_entry_points", limit=int(limit))
         return service.entry_points(limit=limit)
 
     @mcp.tool()
     def get_dead_code() -> list[dict]:
         """Return dead-code findings using the same default tier as :meth:`RepoGraphService.dead_code` (probably_dead)."""
+        _log_tool_call("get_dead_code")
         return service.dead_code()
 
     @mcp.resource("repograph://overview")
     def overview() -> str:
+        _log_tool_call("overview")
         return json.dumps(service.status(), indent=2)
 
     @mcp.resource("repograph://pathways")
     def pathways_resource() -> str:
+        _log_tool_call("pathways_resource")
         pathways = service.pathways(min_confidence=0.0, include_tests=True)
         return json.dumps(
             [{"name": p["name"], "description": p.get("description", ""), "confidence": p.get("confidence", 0.0)} for p in pathways],
@@ -116,6 +132,7 @@ def create_server(service: RepoGraphService, *, port: int | None = None):
 
     @mcp.resource("repograph://communities")
     def communities_resource() -> str:
+        _log_tool_call("communities_resource")
         return json.dumps(service.communities(), indent=2)
 
     # ── Observability log access tools ─────────────────────────────────────
@@ -123,24 +140,49 @@ def create_server(service: RepoGraphService, *, port: int | None = None):
     @mcp.tool()
     def list_log_sessions() -> list[dict]:
         """List available observability log sessions (run_ids, timestamps, record counts)."""
+        _log_tool_call("list_log_sessions")
         return service.list_log_sessions()
 
     @mcp.tool()
     def get_errors(run_id: str = "") -> list[dict]:
         """Return recent ERROR and CRITICAL log records for the given run (empty = latest)."""
-        _logger.info("mcp tool: get_errors", run_id=run_id or "latest")
+        _log_tool_call("get_errors", run_id=run_id or "latest")
         return service.get_recent_errors(run_id=run_id or None)
 
     @mcp.tool()
     def get_log_subsystem(subsystem: str, run_id: str = "") -> list[dict]:
         """Return log records for one subsystem (pipeline, parsers, graph_store, …)."""
-        _logger.info("mcp tool: get_log_subsystem", subsystem=subsystem, run_id=run_id or "latest")
+        _log_tool_call("get_log_subsystem", subsystem=subsystem, run_id=run_id or "latest")
         return service.get_log_session(run_id=run_id or None, subsystem=subsystem)
+
+    # ── Natural language query (Block I5) ───────────────────────────────────
+
+    @mcp.tool()
+    def query_graph(question: str, model: str = "") -> dict:
+        """Translate a plain-English question about the codebase into Cypher and return results.
+
+        Requires the ``anthropic`` package and a valid ``ANTHROPIC_API_KEY`` env var.
+        The query is always read-only — write operations are refused before execution.
+
+        Parameters
+        ----------
+        question:
+            Natural-language question about the codebase, e.g.
+            "Which API layer functions have never been covered by tests?"
+        model:
+            Optional Anthropic model override. Leave empty to use the default
+            (``REPOGRAPH_NL_MODEL`` env var, or claude-haiku-4-5-20251001).
+        """
+        from repograph.mcp.nl_query import NLQueryEngine
+        _log_tool_call("query_graph", question_len=len(question), model=model or "")
+        engine = NLQueryEngine(service, model=model or None)
+        return engine.query(question)
 
     # ── Schema / registry resources ─────────────────────────────────────────
 
     @mcp.resource("repograph://schema")
     def schema_resource() -> str:
+        _log_tool_call("schema_resource")
         return json.dumps(
             {
                 "modules": service.modules(),

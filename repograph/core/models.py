@@ -8,6 +8,36 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+__all__ = [
+    "NodeID",
+    "FileRecord",
+    "FileNode",
+    "FolderNode",
+    "FunctionNode",
+    "ClassNode",
+    "VariableNode",
+    "ImportNode",
+    "DuplicateSymbolGroup",
+    "DocSymbolWarning",
+    "CallSite",
+    "ImportEdge",
+    "CallEdge",
+    "FlowsIntoEdge",
+    "ExtendsEdge",
+    "ImplementsEdge",
+    "CoupledWithEdge",
+    "PathwayStep",
+    "VariableThread",
+    "PathwayDoc",
+    "CommunityNode",
+    "ProcessNode",
+    "ArtifactMeta",
+    "StaleResult",
+    "ParsedFile",
+    "DiffResult",
+    "AffectedSet",
+]
+
 
 # ---------------------------------------------------------------------------
 # Canonical ID helpers

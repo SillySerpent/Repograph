@@ -16,6 +16,10 @@ and are registered via [`discovery.py`](../../repograph/plugins/discovery.py) (o
    name to the appropriate `*_ORDER` tuple in `discovery.py` and run
    `scripts/check_plugin_coverage.py`.
 
+`build_plugin()` is a required plugin convention. It is not a cleanup target
+just because static callers are sparse; RepoGraph suppresses that factory name
+in plugin-specific dead-code and duplicate heuristics.
+
 ## Plugin IDs and aliases
 
 - **Canonical ids** use a family prefix: `parser.*`, `static_analyzer.*`, `demand_analyzer.*`, `exporter.*`, etc.
@@ -45,7 +49,45 @@ they run only when `RunConfig.experimental_phase_plugins` is `True`.
 Minimal **reference implementations** (not loaded in production) live in
 [`repograph/plugins/examples/`](../../repograph/plugins/examples/README.md).
 
+## Graph schema fields available to plugins
+
+### Layer and role classification (`Function`, `File`)
+
+Plugins that classify functions should write `layer` and `role` via `store.update_function_layer_role(fn_id, layer, role)`:
+
+| Field | Values |
+|-------|--------|
+| `Function.layer` | `"db"`, `"persistence"`, `"business_logic"`, `"api"`, `"ui"`, `"util"`, `"unknown"` |
+| `Function.role` | `"repository"`, `"service"`, `"controller"`, `"handler"`, `"page"`, `"component"`, `"util"`, `"model"`, `"unknown"` |
+| `Function.http_method` | `"GET"`, `"POST"`, `"PUT"`, `"PATCH"`, `"DELETE"`, `"WEBSOCKET"`, `""` |
+| `Function.route_path` | Route pattern string, e.g. `"/api/users/:id"`, or `""` |
+
+Use `store.get_functions_by_layer(layer)` to query all functions in a layer.
+
+### Coverage flag (`Function`)
+
+`Function.is_covered: BOOLEAN` — set by `CoverageOverlayPlugin` after reading `coverage.json`.
+Use `store.update_function_coverage(fn_id, is_covered)` to update it from a dynamic analyzer plugin.
+
+### `MAKES_HTTP_CALL` edge type
+
+For cross-language HTTP call edges (Python caller → JS/TS handler or vice versa):
+
+```python
+store.insert_makes_http_call_edge(
+    from_id="fn::src/client.py::post_user",
+    to_id="fn::src/routes/users.ts::postUser",
+    http_method="POST",
+    url_pattern="/api/users",
+    confidence=0.85,
+    reason="http_endpoint_match",
+)
+```
+
+This relationship is distinct from `CALLS` because it spans language boundaries and carries HTTP metadata. The pathway assembler follows `MAKES_HTTP_CALL` edges when tracing cross-language execution paths.
+
 ## Further reading
 
 - [`DISCOVERY.md`](DISCOVERY.md) — registration order and entry points
 - [`PLUGIN_PHASES_AND_HOOKS.md`](../architecture/PLUGIN_PHASES_AND_HOOKS.md) — hooks vs experimental phases
+- [`../SCHEMA_CHANGES.md`](../SCHEMA_CHANGES.md) — full schema version history with migration notes

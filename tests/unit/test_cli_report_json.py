@@ -19,7 +19,7 @@ FIXTURE = os.path.abspath(
 def indexed_simple_repo(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("cli_report_json")
     repo = str(tmp / "repo")
-    rg_dir = str(tmp / ".repograph")
+    rg_dir = str(tmp / "repo" / ".repograph")
     shutil.copytree(FIXTURE, repo)
     from repograph.pipeline.runner import RunConfig, run_full_pipeline
 
@@ -96,7 +96,7 @@ def test_report_requires_initialized_repo(tmp_path):
     result = runner.invoke(app, ["report", "--json", repo])
     assert result.exit_code == 1
     combined = (result.stdout or "") + (result.stderr or "")
-    assert "init" in combined.lower()
+    assert "sync" in combined.lower()
 
 
 def test_full_report_uninitialized_repo_contract(tmp_path):

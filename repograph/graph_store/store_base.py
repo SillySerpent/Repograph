@@ -35,6 +35,7 @@ class GraphStoreBase(ObservableMixin):
         # Optional batch caches (see store_writes_upserts / store_writes_rel).
         self._runtime_overlay_prefetch: dict[str, tuple[Any, Any, Any, Any]] | None = None
         self._call_edge_prefetch: dict[tuple[str, str], list[list[Any]]] | None = None
+        self.logger.debug("graph store opened", db_path=db_path)
 
     def _require_conn(self) -> Any:
         if self._conn is None:
@@ -50,18 +51,34 @@ class GraphStoreBase(ObservableMixin):
         with a ``_migrate_*`` method that issues ``ALTER TABLE … ADD``
         guarded by a try/except (Kuzu raises when the column already exists).
         """
-        conn = self._require_conn()
-        for ddl in ALL_NODE_TABLES:
-            conn.execute(ddl.strip())
-        for ddl in ALL_REL_TABLES:
-            conn.execute(ddl.strip())
-        # Run all migrations in version order.  Each is idempotent.
-        self._migrate_function_is_test_column()
-        self._migrate_function_entry_score_details()
-        self._migrate_function_runtime_overlay_columns()
-        self._migrate_layer_role_http_columns()
-        self._initialized = True
-        self._calls_extra_lines = self._probe_calls_extra_lines_column()
+        with self.span("graph_store_initialize_schema", db_path=self.db_path):
+            conn = self._require_conn()
+            for ddl in ALL_NODE_TABLES:
+                conn.execute(ddl.strip())
+            for ddl in ALL_REL_TABLES:
+                conn.execute(ddl.strip())
+            # Run all migrations in version order.  Each is idempotent.
+            self._migrate_function_is_test_column()
+            self._migrate_function_entry_score_details()
+            self._migrate_function_runtime_overlay_columns()
+            self._migrate_layer_role_http_columns()
+            self._migrate_coverage_columns()
+            # NOTE: KuzuDB 0.11.x does not support CREATE INDEX DDL for secondary/hash
+            # indexes on node properties (Block D2).  KuzuDB's columnar scan already
+            # applies predicate pushdown on WHERE file_path = $x queries, so no explicit
+            # index DDL is needed or possible.  See docs/SCHEMA_CHANGES.md v1.5.
+            self._initialized = True
+            self._calls_extra_lines = self._probe_calls_extra_lines_column()
+
+    def prepare_read_state(self) -> None:
+        """Probe optional schema-dependent read features without running DDL.
+
+        Read-only CLI/API surfaces should use this instead of
+        :meth:`initialize_schema` so concurrent readers do not perform schema
+        creation or migrations.
+        """
+        with self.span("graph_store_prepare_read_state", db_path=self.db_path):
+            self._calls_extra_lines = self._probe_calls_extra_lines_column()
 
     def _migrate_function_is_test_column(self) -> None:
         """schema v1.3 — Add Function.is_test."""
@@ -127,6 +144,16 @@ class GraphStoreBase(ObservableMixin):
             except Exception:
                 _logger.debug("migration v1.6: column already exists — skipping", ddl=ddl)
 
+    def _migrate_coverage_columns(self) -> None:
+        """schema v1.7 — Add Function.is_covered (pytest-cov overlay, Block I4)."""
+        for ddl in [
+            "ALTER TABLE Function ADD is_covered BOOLEAN DEFAULT false",
+        ]:
+            try:
+                self._require_conn().execute(ddl)
+            except Exception:
+                _logger.debug("migration v1.7: column already exists — skipping", ddl=ddl)
+
     def _probe_calls_extra_lines_column(self) -> bool:
         """True when CALLS.extra_site_lines exists (schema >= 1.1)."""
         try:
@@ -146,19 +173,21 @@ class GraphStoreBase(ObservableMixin):
         Prefer calling _delete_db_dir() BEFORE constructing the GraphStore
         (as run_full_pipeline does) to avoid competing open handles entirely.
         """
-        self._close_handles()
-        _delete_db_dir(self.db_path)
-        self._db = kuzu.Database(self.db_path)
-        self._conn = kuzu.Connection(self._db)
-        self._initialized = False
-        self._calls_extra_lines = False
-        self._runtime_overlay_prefetch = None
-        self._call_edge_prefetch = None
+        with self.span("graph_store_clear_all_data", db_path=self.db_path):
+            self._close_handles()
+            _delete_db_dir(self.db_path)
+            self._db = kuzu.Database(self.db_path)
+            self._conn = kuzu.Connection(self._db)
+            self._initialized = False
+            self._calls_extra_lines = False
+            self._runtime_overlay_prefetch = None
+            self._call_edge_prefetch = None
 
     def close(self) -> None:
         """Explicitly release all database handles.
         Call this before running a new full pipeline on the same DB path."""
-        self._close_handles()
+        with self.span("graph_store_close", db_path=self.db_path):
+            self._close_handles()
 
     def _close_handles(self) -> None:
         """Release Python references to kuzu objects and hint the GC."""

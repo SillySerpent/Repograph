@@ -4,7 +4,9 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from typing import Any, cast
 from unittest.mock import MagicMock, patch, call
+from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -44,8 +46,8 @@ def _patch_watchdog():
     watchdog_obs = types.ModuleType("watchdog.observers")
     watchdog_evt = types.ModuleType("watchdog.events")
 
-    watchdog_obs.Observer = _FakeObserver
-    watchdog_evt.FileSystemEventHandler = _FakeEventHandler
+    setattr(watchdog_obs, "Observer", _FakeObserver)
+    setattr(watchdog_evt, "FileSystemEventHandler", _FakeEventHandler)
 
     sys.modules.setdefault("watchdog", watchdog_pkg)
     sys.modules["watchdog.observers"] = watchdog_obs
@@ -65,7 +67,8 @@ def test_debounce_multiple_events_triggers_one_sync(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     sync_calls: list[float] = []
 
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
@@ -94,7 +97,8 @@ def test_debounce_two_separate_bursts_trigger_two_syncs(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     sync_calls: list[float] = []
 
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
@@ -126,12 +130,14 @@ def test_daemon_start_starts_observer(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
     daemon.start()
 
-    assert daemon._observer is not None
-    assert daemon._observer.started, "Observer.start() must be called by daemon.start()"
+    observer = cast(Any, daemon._observer)
+    assert observer is not None
+    assert observer.started, "Observer.start() must be called by daemon.start()"
     daemon.stop()
 
 
@@ -141,7 +147,8 @@ def test_daemon_stop_stops_and_joins_observer(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
     daemon.start()
     daemon.stop()
@@ -155,7 +162,8 @@ def test_daemon_stop_cancels_pending_debounce(tmp_path):
 
     from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     sync_calls: list[int] = []
 
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
@@ -180,7 +188,8 @@ def test_sync_ok_reports_to_stderr(tmp_path, capsys):
 
     from repograph.interactive.watch import FileWatcherDaemon
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
 
     with patch("repograph.pipeline.runner.run_incremental_pipeline") as mock_run:
@@ -198,7 +207,8 @@ def test_sync_error_reports_to_stderr(tmp_path, capsys):
 
     from repograph.interactive.watch import FileWatcherDaemon
 
-    config = MagicMock()
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
     daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
 
     with patch("repograph.pipeline.runner.run_incremental_pipeline") as mock_run:
@@ -242,7 +252,8 @@ def test_watchdog_missing_raises_import_error(tmp_path):
             del sys.modules["repograph.interactive.watch"]
         from repograph.interactive.watch import FileWatcherDaemon
 
-        config = MagicMock()
+        from repograph.pipeline.runner import RunConfig
+        config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
         daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
 
         try:
@@ -258,3 +269,117 @@ def test_watchdog_missing_raises_import_error(tmp_path):
             sys.modules[key] = val
         # Reload the watch module with real (fake) stubs
         sys.modules.pop("repograph.interactive.watch", None)
+
+
+# ---------------------------------------------------------------------------
+# I2.5 single-flight: no overlapping sync; coalesced follow-up
+# ---------------------------------------------------------------------------
+
+
+def test_single_flight_second_debounced_fire_does_not_reenter_sync(tmp_path):
+    """While a sync runs, another debounced fire only sets pending — no re-entry."""
+    _patch_watchdog()
+
+    from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
+
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
+    daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
+
+    started = threading.Event()
+    release = threading.Event()
+    depth_lock = threading.Lock()
+    active = [0]
+    max_active = [0]
+
+    def _fake_sync():
+        with depth_lock:
+            active[0] += 1
+            max_active[0] = max(max_active[0], active[0])
+            assert active[0] <= 1
+        started.set()
+        assert release.wait(timeout=5)
+        with depth_lock:
+            active[0] -= 1
+
+    daemon._run_sync = _fake_sync
+
+    t1 = threading.Thread(target=daemon._debounced_fire, daemon=True)
+    t1.start()
+    assert started.wait(timeout=5)
+    daemon._debounced_fire()
+    release.set()
+    t1.join(timeout=5)
+    time.sleep(_DEBOUNCE_SECS + 0.2)
+
+    assert max_active[0] <= 1, "sync must not be re-entered concurrently"
+    assert active[0] == 0
+    assert daemon._pending_resync is False
+
+
+def test_pending_resync_coalesces_to_one_follow_up_sync(tmp_path):
+    """Multiple debounced fires during one sync yield exactly one follow-up run."""
+    _patch_watchdog()
+
+    from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
+
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
+    daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
+
+    started = threading.Event()
+    release = threading.Event()
+    sync_count = [0]
+
+    def _fake_sync():
+        sync_count[0] += 1
+        if sync_count[0] == 1:
+            started.set()
+            assert release.wait(timeout=5)
+
+    daemon._run_sync = _fake_sync
+
+    t1 = threading.Thread(target=daemon._debounced_fire, daemon=True)
+    t1.start()
+    assert started.wait(timeout=5)
+    daemon._debounced_fire()
+    daemon._debounced_fire()
+    daemon._debounced_fire()
+    release.set()
+    t1.join(timeout=5)
+    time.sleep(_DEBOUNCE_SECS + 0.2)
+
+    assert sync_count[0] == 2
+
+
+def test_stop_suppresses_follow_up_schedule(tmp_path):
+    """After stop(), completing an in-flight sync must not schedule another debounce."""
+    _patch_watchdog()
+
+    from repograph.interactive.watch import FileWatcherDaemon, _DEBOUNCE_SECS
+
+    from repograph.pipeline.runner import RunConfig
+    config = RunConfig(repo_root=str(tmp_path), repograph_dir=str(tmp_path / ".repograph"), include_git=False)
+    daemon = FileWatcherDaemon(config, repo_root=str(tmp_path))
+
+    started = threading.Event()
+    release = threading.Event()
+    sync_count = [0]
+
+    def _fake_sync():
+        sync_count[0] += 1
+        started.set()
+        release.wait(timeout=5)
+
+    daemon._run_sync = _fake_sync
+
+    t1 = threading.Thread(target=daemon._debounced_fire, daemon=True)
+    t1.start()
+    assert started.wait(timeout=5)
+    daemon._debounced_fire()
+    daemon.stop()
+    release.set()
+    t1.join(timeout=5)
+    time.sleep(_DEBOUNCE_SECS + 0.25)
+
+    assert sync_count[0] == 1

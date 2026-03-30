@@ -19,14 +19,17 @@ Machine-readable contract version: see `repograph.trust.contract.CONTRACT_VERSIO
 
 ### Runtime traces merged into the graph
 
-When JSONL traces exist under `.repograph/runtime/`, sync (and `repograph trace report`)
-can **persist** observations onto `Function` nodes: `runtime_observed`,
+When JSONL traces exist under `.repograph/runtime/`, sync can **persist**
+observations onto `Function` nodes: `runtime_observed`,
 `runtime_observed_for_hash` (the file `source_hash` at observation time), call counts,
 and timestamps. Static dead-code classification **skips** functions whose observation
 still matches the **current** `source_hash`. Re-indexing a **changed** file clears stale
 runtime fields in `upsert_function`, so dead-code tiers can be recomputed for the new
 revision. This does **not** add new `CALLS` edges to the database (those remain static);
 it adjusts **per-function** evidence and dead flags only.
+
+`repograph trace report` is read-only: it analyzes collected JSONL files against the
+current graph but does not persist overlay results by itself.
 
 ## Known limitations (any repo)
 

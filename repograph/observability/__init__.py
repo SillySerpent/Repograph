@@ -95,6 +95,9 @@ __all__ = [
     # Init / shutdown
     "init_observability",
     "shutdown_observability",
+    "ensure_observability_session",
+    "is_observability_active",
+    "active_run_id",
     "new_run_id",
     # Logger
     "get_logger",
@@ -187,3 +190,47 @@ def shutdown_observability() -> None:
 
     remove_jsonl_handler()
     _active_config = None
+
+
+def is_observability_active() -> bool:
+    """Return True when a structured-log session is currently active."""
+    return _active_config is not None and get_active_sink() is not None
+
+
+def active_run_id() -> str | None:
+    """Return the current structured-log run id, if any."""
+    if _active_config is None:
+        return None
+    return _active_config.run_id
+
+
+def ensure_observability_session(
+    log_dir: str | Path,
+    *,
+    run_id: str | None = None,
+    command_id: str | None = None,
+    min_level: str = "DEBUG",
+    subsystem_files: bool = True,
+) -> str | None:
+    """Start a structured-log session when none is active.
+
+    Returns the created run id when this call started a new session; otherwise
+    returns ``None`` and leaves the existing session untouched.
+    """
+    if is_observability_active():
+        if command_id:
+            set_obs_context(command_id=command_id)
+        return None
+
+    resolved_run_id = run_id or new_run_id()
+    init_observability(
+        ObservabilityConfig(
+            log_dir=Path(log_dir),
+            run_id=resolved_run_id,
+            min_level=min_level,
+            subsystem_files=subsystem_files,
+        )
+    )
+    if command_id:
+        set_obs_context(command_id=command_id)
+    return resolved_run_id

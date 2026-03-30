@@ -29,10 +29,18 @@ class TraceWriteStats:
 class TraceWriter:
     """Writes JSONL trace records with policy-aware limits."""
 
-    def __init__(self, out_dir: Path, session_name: str, policy: TracePolicy) -> None:
+    def __init__(
+        self,
+        out_dir: Path,
+        session_name: str,
+        policy: TracePolicy,
+        *,
+        single_file: bool = False,
+    ) -> None:
         self._out_dir = out_dir
         self._session_name = session_name
         self._policy = policy
+        self._single_file = single_file
         self._stats = TraceWriteStats()
         self._file = None
         self._path: Path | None = None
@@ -67,6 +75,14 @@ class TraceWriter:
 
     def open(self) -> None:
         self._out_dir.mkdir(parents=True, exist_ok=True)
+        if self._single_file:
+            # Keep runtime trace retention bounded: only one JSONL trace file
+            # should remain when single-file mode is enabled.
+            for old in self._out_dir.glob(f"*{TRACE_FILE_SUFFIX}"):
+                try:
+                    old.unlink()
+                except OSError:
+                    continue
         self._path = self._next_path()
         try:
             self._file = open(self._path, "w", encoding="utf-8", buffering=1)
@@ -99,12 +115,16 @@ class TraceWriter:
         return True
 
     def _next_path(self) -> Path:
+        if self._single_file:
+            return self._out_dir / f"{self._session_name}{TRACE_FILE_SUFFIX}"
         import time
         ts = int(time.time())
         suffix = "" if self._idx == 0 else f"_{self._idx}"
         return self._out_dir / f"{self._session_name}_{ts}{suffix}{TRACE_FILE_SUFFIX}"
 
     def _rotate(self) -> bool:
+        if self._single_file:
+            return False
         if self._policy.rotate_files <= 0 or self._idx >= self._policy.rotate_files:
             return False
         self.close()

@@ -6,6 +6,10 @@ many files at once) into a single incremental sync.  Sync status is reported
 to ``stderr`` in a machine-readable format so callers (scripts, CI hooks) can
 detect failures without parsing Rich console output.
 
+Only one debounced sync runs at a time.  If file events arrive while a sync
+is in progress, a single follow-up sync is scheduled after the current run
+finishes (coalesced), avoiding overlapping ``run_incremental_pipeline`` calls.
+
 Usage::
 
     from repograph.interactive.watch import FileWatcherDaemon
@@ -41,10 +45,13 @@ class FileWatcherDaemon:
         self._observer = None
         self._debounce_timer: threading.Timer | None = None
         self._debounce_lock = threading.Lock()
+        self._sync_in_flight = False
+        self._pending_resync = False
+        self._shutdown = False
         self._run_sync = self._make_sync_fn()
 
     def _make_sync_fn(self):
-        """Return the function called after the debounce delay expires."""
+        """Return the function that runs one incremental sync (tests may replace)."""
 
         def _do_sync():
             # Import lazily so unit tests can patch the module attribute.
@@ -57,12 +64,36 @@ class FileWatcherDaemon:
 
         return _do_sync
 
+    def _debounced_fire(self) -> None:
+        """Invoked when the debounce timer expires; enforces single-flight sync."""
+        with self._debounce_lock:
+            self._debounce_timer = None
+            if self._shutdown:
+                return
+            if self._sync_in_flight:
+                self._pending_resync = True
+                return
+            self._sync_in_flight = True
+
+        try:
+            self._run_sync()
+        finally:
+            with self._debounce_lock:
+                self._sync_in_flight = False
+                need_follow = self._pending_resync
+                self._pending_resync = False
+                shutting_down = self._shutdown
+            if need_follow and not shutting_down:
+                self._schedule()
+
     def _schedule(self) -> None:
         """Reset the debounce timer so a burst of events triggers one sync."""
         with self._debounce_lock:
+            if self._shutdown:
+                return
             if self._debounce_timer is not None:
                 self._debounce_timer.cancel()
-            t = threading.Timer(_DEBOUNCE_SECS, self._run_sync)
+            t = threading.Timer(_DEBOUNCE_SECS, self._debounced_fire)
             t.daemon = True
             self._debounce_timer = t
             t.start()
@@ -119,6 +150,8 @@ class FileWatcherDaemon:
                 "watchdog is required for file watching: pip install watchdog"
             ) from exc
 
+        with self._debounce_lock:
+            self._shutdown = False
         handler = self._make_handler()
         self._observer = Observer()
         self._observer.schedule(handler, self._repo_root, recursive=True)
@@ -127,6 +160,8 @@ class FileWatcherDaemon:
     def stop(self) -> None:
         """Stop the observer and cancel any pending debounce timer."""
         with self._debounce_lock:
+            self._shutdown = True
+            self._pending_resync = False
             if self._debounce_timer is not None:
                 self._debounce_timer.cancel()
                 self._debounce_timer = None

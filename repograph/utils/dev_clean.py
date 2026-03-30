@@ -127,6 +127,18 @@ def clean_development_artifacts(repo_root: Path, *, recursive: bool = True) -> l
     root = repo_root.resolve()
     removed: list[str] = []
 
+    # --- Accidental mock-derived artifact roots ---
+    # Some unit test regressions can leak MagicMock-derived paths into runner code,
+    # which can create a repo-root "MagicMock/" directory. This is never a valid
+    # user artifact; remove it as part of dev clean.
+    magicmock_dir = root / "MagicMock"
+    if magicmock_dir.is_dir():
+        try:
+            shutil.rmtree(magicmock_dir)
+            removed.append(str(magicmock_dir))
+        except OSError:
+            pass
+
     # --- Root-level venv / build dirs ---
     for name in sorted(_ROOT_VENV_NAMES | _ROOT_ARTIFACT_DIRS):
         p = root / name

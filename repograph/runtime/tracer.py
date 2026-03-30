@@ -98,7 +98,12 @@ class SysTracer:
     def start(self) -> None:
         """Begin tracing."""
         out_dir = trace_dir(self.repograph_dir)
-        self._writer = TraceWriter(out_dir, self.session_name, self.trace_policy)
+        self._writer = TraceWriter(
+            out_dir,
+            self.session_name,
+            self.trace_policy,
+            single_file=True,
+        )
         self._writer.open()
         self._path = self._writer.path
 
@@ -140,28 +145,34 @@ class SysTracer:
 
     def _trace_fn(self, frame, event, arg):
         if event != "call":
-            return self._trace_fn
+            # Returning None here tells CPython not to install a local trace
+            # function on this frame.  The global trace (sys.settrace) is still
+            # self._trace_fn, so new call events continue to arrive normally.
+            # Returning self._trace_fn instead would install a local trace on
+            # every frame, causing line/return/exception callbacks on every
+            # executed line — dramatically inflating CPU and memory usage.
+            return None
 
         filename = frame.f_code.co_filename
         if not filename:
-            return self._trace_fn
+            return None
 
         # Only trace files inside repo_root
         try:
             rel = os.path.relpath(filename, self.repo_root)
         except ValueError:
-            return self._trace_fn
+            return None
 
         if rel.startswith("..") or rel.startswith("/"):
-            return self._trace_fn
+            return None
 
         # Skip non-source files (frozen modules, C extensions, etc.)
         if not filename.endswith(".py"):
-            return self._trace_fn
+            return None
 
         if not self.include_stdlib:
             if "site-packages" in filename or filename.startswith(sys.prefix):
-                return self._trace_fn
+                return None
 
         # Build qualified name from frame
         fn_name = frame.f_code.co_qualname if hasattr(frame.f_code, "co_qualname") else frame.f_code.co_name
@@ -192,9 +203,9 @@ class SysTracer:
         if not decision.accepted:
             if self._writer:
                 self._writer.stats.drop(decision.reason or "filtered")
-            return self._trace_fn
+            return None
         self._write(record)
-        return self._trace_fn
+        return None
 
     def _write(self, record: dict) -> None:
         if not self._writer:
