@@ -16,6 +16,10 @@ and are registered via [`discovery.py`](../../repograph/plugins/discovery.py) (o
    name to the appropriate `*_ORDER` tuple in `discovery.py` and run
    `scripts/check_plugin_coverage.py`.
 
+`build_plugin()` is a required plugin convention. It is not a cleanup target
+just because static callers are sparse; RepoGraph suppresses that factory name
+in plugin-specific dead-code and duplicate heuristics.
+
 ## Plugin IDs and aliases
 
 - **Canonical ids** use a family prefix: `parser.*`, `static_analyzer.*`, `demand_analyzer.*`, `exporter.*`, etc.
