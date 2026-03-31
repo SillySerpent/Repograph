@@ -5,7 +5,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from repograph.cli import app
+from repograph.surfaces.cli import app
 from repograph.core.models import FileRecord, ParsedFile
 from repograph.graph_store.store import GraphStore
 from repograph.observability import (
