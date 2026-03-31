@@ -1,4 +1,4 @@
-"""Tests for repograph.config — get_repo_root and _read_index_yaml (Block B6/A4)."""
+"""Tests for repograph.settings — get_repo_root and _read_index_yaml (Block B6/A4)."""
 from __future__ import annotations
 
 import os
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from repograph.config import get_repo_root
+from repograph.settings import get_repo_root
 from repograph.exceptions import RepographNotFoundError
 
 
@@ -68,7 +68,7 @@ def test_get_repo_root_symlink_resolution(tmp_path: Path):
 
 
 def test_read_index_yaml_valid(tmp_path: Path):
-    from repograph.config import _read_index_yaml
+    from repograph.settings import _read_index_yaml
 
     yaml_file = tmp_path / "repograph.index.yaml"
     yaml_file.write_text("exclude_dirs:\n  - vendor\n  - node_modules\n", encoding="utf-8")
@@ -79,11 +79,11 @@ def test_read_index_yaml_valid(tmp_path: Path):
 def test_read_index_yaml_malformed(tmp_path: Path, caplog):
     """Invalid YAML logs a warning and returns None."""
     import logging
-    from repograph.config import _read_index_yaml
+    from repograph.settings import _read_index_yaml
 
     yaml_file = tmp_path / "repograph.index.yaml"
     yaml_file.write_text("invalid: yaml: [unclosed", encoding="utf-8")
-    with caplog.at_level(logging.WARNING, logger="repograph.config"):
+    with caplog.at_level(logging.WARNING, logger="repograph.settings"):
         result = _read_index_yaml(str(yaml_file))
     assert result is None
     assert any("index YAML" in r.message or "config" in r.message.lower() for r in caplog.records)
@@ -91,7 +91,7 @@ def test_read_index_yaml_malformed(tmp_path: Path, caplog):
 
 def test_read_index_yaml_missing_file(tmp_path: Path):
     """Non-existent file returns None without error."""
-    from repograph.config import _read_index_yaml
+    from repograph.settings import _read_index_yaml
 
     result = _read_index_yaml(str(tmp_path / "nonexistent.yaml"))
     assert result is None
@@ -99,7 +99,7 @@ def test_read_index_yaml_missing_file(tmp_path: Path):
 
 def test_read_index_yaml_empty_file(tmp_path: Path):
     """Empty file returns empty dict (yaml.safe_load returns None → coerced to {})."""
-    from repograph.config import _read_index_yaml
+    from repograph.settings import _read_index_yaml
 
     yaml_file = tmp_path / "repograph.index.yaml"
     yaml_file.write_text("", encoding="utf-8")
