@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from repograph.cli import app
+from repograph.surfaces.cli import app
 
 
 @pytest.fixture
