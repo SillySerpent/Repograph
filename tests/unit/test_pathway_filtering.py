@@ -24,7 +24,7 @@ def flask_rg(tmp_path_factory):
         repo_root=repo, repograph_dir=rg_dir,
         include_git=False, full=True,
     ))
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
     rg = RepoGraph(repo, repograph_dir=rg_dir)
     yield rg
     rg.close()
