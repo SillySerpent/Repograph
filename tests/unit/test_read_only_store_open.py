@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from repograph.cli import _get_root_and_store
+from repograph.surfaces.cli.app import _get_root_and_store
 from repograph.services.repo_graph_service import RepoGraphService
 
 
