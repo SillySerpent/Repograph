@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from repograph.services.repo_graph_service import _build_report_warnings
+from repograph.services.service_full_report import _build_report_warnings
 
 
 def test_build_report_warnings_includes_caps_and_trace_mode() -> None:
@@ -52,3 +52,24 @@ def test_build_report_warnings_includes_dynamic_skip() -> None:
         cfg_diag={},
     )
     assert any("Dynamic analysis was requested" in w for w in ws)
+
+
+def test_build_report_warnings_includes_existing_input_reuse_note() -> None:
+    ws = _build_report_warnings(
+        health={
+            "sync_mode": "incremental",
+            "status": "ok",
+            "dynamic_analysis": {
+                "mode": "existing_inputs",
+                "inputs_present": True,
+                "executed": True,
+            },
+        },
+        pathways_total=1,
+        pathways_shown=1,
+        communities_total=1,
+        communities_shown=1,
+        cfg_top={"a": {"usage_count": 1}},
+        cfg_diag={},
+    )
+    assert any("reused from existing trace or coverage inputs" in w for w in ws)

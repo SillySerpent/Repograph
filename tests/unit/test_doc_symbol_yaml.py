@@ -1,7 +1,7 @@
 """repograph.index.yaml — doc_symbols_flag_unknown."""
 from __future__ import annotations
 
-from repograph.config import load_doc_symbol_options
+from repograph.settings import load_doc_symbol_options
 
 
 def test_doc_symbols_flag_unknown_false_by_default(tmp_path) -> None:
