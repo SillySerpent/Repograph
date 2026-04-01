@@ -192,7 +192,7 @@ class TestVendoredPipelineIntegration:
             include_git=False, full=True,
         ))
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             ps = rg.pathways(include_tests=True)
             for p in ps:
