@@ -25,7 +25,10 @@ def test_allows_meaningful_keys() -> None:
 
 
 class _EmptyStore:
-    def get_all_pathways(self):
+    def query(self, _cypher):
+        return []
+
+    def get_pathway_steps(self, _pathway_id):
         return []
 
     def get_all_files(self):
@@ -40,7 +43,10 @@ def test_build_registry_with_diagnostics_empty_valid() -> None:
 
 
 class _FailingStore:
-    def get_all_pathways(self):
+    def query(self, _cypher):
+        raise RuntimeError("boom")
+
+    def get_pathway_steps(self, _pathway_id):
         raise RuntimeError("boom")
 
     def get_all_files(self):
@@ -52,3 +58,24 @@ def test_build_registry_with_diagnostics_empty_error() -> None:
     assert reg == {}
     assert diag.get("status") == "empty_error"
     assert diag.get("errors")
+
+
+def test_build_registry_uses_pathway_contexts_and_abs_paths(tmp_path) -> None:
+    source = tmp_path / "app.py"
+    source.write_text('import os\nAPI_KEY = os.getenv("API_KEY")\n', encoding="utf-8")
+
+    class _Store:
+        def query(self, _cypher):
+            return [("pw-1", "startup_flow", "CONFIG DEPENDENCIES\n• API_KEY\n")]
+
+        def get_pathway_steps(self, _pathway_id):
+            return [{"file_path": "app.py"}]
+
+        def get_all_files(self):
+            return [{"path": "app.py", "abs_path": str(source), "language": "python"}]
+
+    reg, diag = build_registry_with_diagnostics(_Store())  # type: ignore[arg-type]
+    assert diag["pathways_with_context"] == 1
+    assert reg["API_KEY"]["pathways"] == ["startup_flow"]
+    assert reg["API_KEY"]["files"] == ["app.py"]
+    assert reg["API_KEY"]["usage_count"] == 2
