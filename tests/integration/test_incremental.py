@@ -160,3 +160,45 @@ class TestIncrementalSync:
         staleness2 = StalenessTracker(rg_dir)
         staled = staleness2.mark_stale_for_file("services.py")
         assert "mirror:services.py" in staled
+
+    def test_incremental_traces_only_persists_dynamic_analysis_health(self, tmp_path):
+        import shutil
+        from repograph.pipeline.health import read_health_json
+        from repograph.pipeline.runner import RunConfig, run_full_pipeline, run_incremental_pipeline
+
+        repo = str(tmp_path / "repo")
+        shutil.copytree(os.path.abspath(SIMPLE_FIXTURE), repo)
+        rg_dir = str(tmp_path / ".repograph")
+
+        config = RunConfig(
+            repo_root=repo,
+            repograph_dir=rg_dir,
+            include_git=False,
+            full=True,
+        )
+        run_full_pipeline(config)
+
+        with open(os.path.join(repo, "coverage.json"), "w", encoding="utf-8") as fh:
+            fh.write(
+                '{'
+                '"files": {'
+                '"main.py": {'
+                '"executed_lines": [2],'
+                '"missing_lines": []'
+                '}'
+                '}'
+                '}'
+            )
+
+        run_incremental_pipeline(config)
+
+        health = read_health_json(rg_dir)
+        assert health is not None
+        assert health["sync_mode"] == "incremental_traces_only"
+        assert health["dynamic_analysis"]["mode"] == "existing_inputs"
+        assert health["dynamic_analysis"]["requested"] is True
+        assert health["dynamic_analysis"]["executed"] is True
+        assert health["dynamic_analysis"]["coverage_json_present"] is True
+        assert health["dynamic_analysis"]["coverage_overlay_applied"] is True
+        assert health["analysis_readiness"]["coverage_json_present"] is True
+        assert health["analysis_readiness"]["coverage_overlay_applied"] is True
