@@ -19,7 +19,7 @@ def dict_get_repo(tmp_path):
 
 
 def test_cfg_get_not_linked_to_flagstore_get(dict_get_repo, tmp_path):
-    from repograph.config import repograph_dir
+    from repograph.settings import repograph_dir
     from repograph.pipeline.runner import RunConfig, run_full_pipeline
 
     rg = repograph_dir(dict_get_repo)

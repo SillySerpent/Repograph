@@ -21,7 +21,7 @@ def poly_rg(tmp_path_factory):
         repo_root=repo, repograph_dir=rg_dir,
         include_git=False, full=True,
     ))
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
     rg = RepoGraph(repo, repograph_dir=rg_dir)
     yield rg
     rg.close()
@@ -128,7 +128,7 @@ class TestImpactFallbackBehavior:
     def test_via_interface_warning_fires_when_no_direct_callers(self, poly_rg):
         """When a symbol has no direct callers but interface callers exist,
         the 'callers_resolved_via_interface' warning must appear."""
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
 
         # Build a fresh store where we can manipulate what get_callers returns
         # by testing against a method that genuinely has no direct callers.
