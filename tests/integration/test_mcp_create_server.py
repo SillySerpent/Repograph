@@ -36,7 +36,7 @@ def flask_service():
 
 
 def test_create_server_registers_tools(flask_service) -> None:
-    from repograph.mcp.server import create_server
+    from repograph.surfaces.mcp.server import create_server
 
     mcp = create_server(flask_service)
     tools = asyncio.run(mcp.list_tools())
@@ -46,7 +46,7 @@ def test_create_server_registers_tools(flask_service) -> None:
 
 
 def test_impact_tool_shape(flask_service) -> None:
-    from repograph.mcp.server import create_server
+    from repograph.surfaces.mcp.server import create_server
 
     mcp = create_server(flask_service)
     raw = asyncio.run(mcp.call_tool("impact", {"symbol": "validate_credentials", "min_confidence": 0.5}))
@@ -63,7 +63,7 @@ def test_impact_tool_shape(flask_service) -> None:
 
 
 def test_trace_variable_schema_no_pathway_only_arg(flask_service) -> None:
-    from repograph.mcp.server import create_server
+    from repograph.surfaces.mcp.server import create_server
 
     mcp = create_server(flask_service)
     tools = asyncio.run(mcp.list_tools())
