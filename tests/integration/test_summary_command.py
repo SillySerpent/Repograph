@@ -58,7 +58,15 @@ class TestSummaryCommandBasic:
 
     def test_summary_shows_issues_section(self, synced_repo):
         result = _run_summary(synced_repo)
-        assert "Issue" in result.stdout or "dead code" in result.stdout.lower()
+        assert "Risk" in result.stdout or "dead code" in result.stdout.lower()
+
+    def test_summary_shows_structural_hotspots_section(self, synced_repo):
+        result = _run_summary(synced_repo)
+        assert "Structural Hotspots" in result.stdout
+
+    def test_summary_shows_trust_section(self, synced_repo):
+        result = _run_summary(synced_repo)
+        assert "Trust" in result.stdout
 
     def test_summary_shows_purpose_from_readme(self, synced_repo):
         result = _run_summary(synced_repo)
@@ -77,8 +85,19 @@ class TestSummaryJSONOutput:
     def test_json_has_required_keys(self, synced_repo):
         result = _run_summary(synced_repo, ["--json"])
         data = json.loads(result.stdout)
-        for key in ("repo", "stats", "top_entry_points", "top_pathways",
-                    "dead_code_count", "high_severity_duplicates"):
+        for key in (
+            "repo",
+            "stats",
+            "health",
+            "dynamic_analysis",
+            "trust",
+            "top_entry_points",
+            "top_pathways",
+            "major_risks",
+            "structural_hotspots",
+            "dead_code_count",
+            "high_severity_duplicates",
+        ):
             assert key in data, f"Missing key '{key}' in JSON output"
 
     def test_json_top_entry_points_structure(self, synced_repo):
@@ -90,6 +109,8 @@ class TestSummaryJSONOutput:
             assert "name" in ep
             assert "file" in ep
             assert "score" in ep
+            assert "callers" in ep
+            assert "callees" in ep
 
     def test_json_top_pathways_structure(self, synced_repo):
         result = _run_summary(synced_repo, ["--json"])
@@ -98,8 +119,43 @@ class TestSummaryJSONOutput:
         assert isinstance(ps, list)
         for p in ps:
             assert "name" in p
+            assert "entry" in p
+            assert "steps" in p
             assert "importance" in p
             assert "confidence" in p
+            assert "source" in p
+
+    def test_json_trust_structure(self, synced_repo):
+        result = _run_summary(synced_repo, ["--json"])
+        data = json.loads(result.stdout)
+        trust = data["trust"]
+        assert "status" in trust
+        assert "sync_status" in trust
+        assert "sync_mode" in trust
+        assert "warnings" in trust
+        assert "analysis_readiness" in trust
+
+    def test_json_major_risks_structure(self, synced_repo):
+        result = _run_summary(synced_repo, ["--json"])
+        data = json.loads(result.stdout)
+        risks = data["major_risks"]
+        assert isinstance(risks, list)
+        for risk in risks:
+            assert "kind" in risk
+            assert "severity" in risk
+            assert "count" in risk
+            assert "summary" in risk
+
+    def test_json_structural_hotspots_structure(self, synced_repo):
+        result = _run_summary(synced_repo, ["--json"])
+        data = json.loads(result.stdout)
+        hotspots = data["structural_hotspots"]
+        assert isinstance(hotspots, list)
+        for hotspot in hotspots:
+            assert "module" in hotspot
+            assert "summary" in hotspot
+            assert "function_count" in hotspot
+            assert "class_count" in hotspot
 
     def test_json_pathways_sorted_by_importance(self, synced_repo):
         result = _run_summary(synced_repo, ["--json"])
