@@ -202,3 +202,79 @@ class TestScorerRegressions:
     def test_zero_callees_scores_zero(self) -> None:
         fn = _fn()
         assert score_function(fn, callees_count=0, callers_count=0) == 0.0
+
+
+class TestOperationalSurfacePrioritization:
+    """Operational surfaces should outrank framework plumbing with similar graph shape."""
+
+    def test_parser_parse_is_demoted_below_cli_surface(self) -> None:
+        parser_fn = {
+            "name": "parse",
+            "qualified_name": "TypeScriptParser.parse",
+            "file_path": "repograph/plugins/parsers/typescript/typescript_parser.py",
+            "decorators": [],
+            "is_exported": False,
+            "is_dead": False,
+        }
+        cli_fn = {
+            "name": "report",
+            "qualified_name": "report",
+            "file_path": "repograph/surfaces/cli/commands/report.py",
+            "decorators": [],
+            "is_exported": False,
+            "is_dead": False,
+        }
+        parser_score = score_function(parser_fn, callees_count=18, callers_count=12)
+        cli_score = score_function(cli_fn, callees_count=18, callers_count=12)
+        parser_bd = score_function_verbose(parser_fn, callees_count=18, callers_count=12)
+
+        assert cli_score > parser_score
+        assert ("parser_internal_demote", 0.18) in parser_bd.multipliers
+
+    def test_pipeline_orchestrator_outranks_phase_run(self) -> None:
+        orchestrator = {
+            "name": "run_full_pipeline",
+            "qualified_name": "repograph.pipeline.runner.run_full_pipeline",
+            "file_path": "repograph/pipeline/runner.py",
+            "decorators": [],
+            "is_exported": False,
+            "is_dead": False,
+        }
+        phase_run = {
+            "name": "run",
+            "qualified_name": "repograph.pipeline.phases.p10_processes.run",
+            "file_path": "repograph/pipeline/phases/p10_processes.py",
+            "decorators": [],
+            "is_exported": False,
+            "is_dead": False,
+        }
+        orchestrator_score = score_function(orchestrator, callees_count=15, callers_count=8)
+        phase_score = score_function(phase_run, callees_count=20, callers_count=8)
+        phase_bd = score_function_verbose(phase_run, callees_count=20, callers_count=8)
+
+        assert orchestrator_score > phase_score
+        assert ("pipeline_phase_run_demote", 0.2) in phase_bd.multipliers
+
+    def test_graph_store_getter_is_demoted_below_cli_surface(self) -> None:
+        getter_fn = {
+            "name": "get_pathway",
+            "qualified_name": "GraphStoreStructureQueries.get_pathway",
+            "file_path": "repograph/graph_store/store_queries_structure.py",
+            "decorators": [],
+            "is_exported": False,
+            "is_dead": False,
+        }
+        cli_fn = {
+            "name": "impact",
+            "qualified_name": "impact",
+            "file_path": "repograph/surfaces/cli/commands/query.py",
+            "decorators": [],
+            "is_exported": False,
+            "is_dead": False,
+        }
+        getter_score = score_function(getter_fn, callees_count=10, callers_count=12)
+        cli_score = score_function(cli_fn, callees_count=10, callers_count=12)
+        getter_bd = score_function_verbose(getter_fn, callees_count=10, callers_count=12)
+
+        assert cli_score > getter_score
+        assert ("graph_query_demote", 0.35) in getter_bd.multipliers
