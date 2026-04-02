@@ -79,7 +79,7 @@ def _file_record_from_path(abs_path: str, language: str) -> FileRecord:
 def test_all_demand_analyzers_run(plugin_smoke_python_simple) -> None:
     """``demand_analyzer.<name>`` — each must return a list (findings)."""
     repo, rg_dir, _store = plugin_smoke_python_simple
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
 
     with RepoGraph(repo, repograph_dir=rg_dir) as rg:
         for name in DEMAND_ANALYZER_ORDER:
@@ -91,7 +91,7 @@ def test_all_demand_analyzers_run(plugin_smoke_python_simple) -> None:
 def test_all_exporters_run(plugin_smoke_python_simple) -> None:
     """``exporter.<name>`` — must complete; typically dict or list fragments."""
     repo, rg_dir, _store = plugin_smoke_python_simple
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
 
     with RepoGraph(repo, repograph_dir=rg_dir) as rg:
         for name in EXPORTER_ORDER:
@@ -112,7 +112,7 @@ def test_all_static_analyzers_run(plugin_smoke_python_simple) -> None:
 def test_all_evidence_producers_run(plugin_smoke_python_simple) -> None:
     """``evidence.<name>`` producers."""
     repo, rg_dir, _store = plugin_smoke_python_simple
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
 
     with RepoGraph(repo, repograph_dir=rg_dir) as rg:
         for name in EVIDENCE_PRODUCER_ORDER:
