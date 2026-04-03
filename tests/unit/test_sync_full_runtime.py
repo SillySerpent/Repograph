@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from contextlib import nullcontext
 from pathlib import Path
@@ -10,6 +11,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from repograph.surfaces.cli import app
+from repograph.surfaces.cli.commands.sync import _repo_venv_activate_hint
 from repograph.pipeline.health import read_health_json
 from repograph.pipeline.runner import RunConfig, run_full_pipeline_with_runtime_overlay
 from repograph.runtime.orchestration import LiveTarget, RuntimePlan
@@ -22,6 +24,8 @@ from repograph.runtime.session import (
     RuntimeFallbackExecution,
     RuntimeSessionTarget,
 )
+
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 class _FakeStore:
@@ -64,6 +68,11 @@ def _repo_with_pytest(tmp_path: Path) -> tuple[Path, Path]:
         encoding="utf-8",
     )
     return repo, repo / ".repograph"
+
+
+def _compact_terminal_output(text: str) -> str:
+    """Normalize ANSI and terminal wrapping for stable CLI assertions."""
+    return "".join(_ANSI_RE.sub("", text).split())
 
 
 def _patch_basic_runtime_runner(monkeypatch, *, dynamic_findings_count: int = 0) -> None:
@@ -846,10 +855,12 @@ def test_cli_sync_warns_when_repo_venv_exists_but_launcher_uses_other_python(tmp
             result = CliRunner().invoke(app, ["sync", str(repo), "--full"])
 
     assert result.exit_code == 0, result.stdout
-    assert "Repo-local .venv detected" in result.stdout
-    assert "Dynamic analysis will use the current interpreter" in result.stdout
-    assert "source" in result.stdout
-    assert ".venv/bin/activate" in result.stdout
+    compact_output = _compact_terminal_output(result.stdout)
+    assert _compact_terminal_output("Repo-local .venv detected") in compact_output
+    assert _compact_terminal_output(
+        "Dynamic analysis will use the current interpreter"
+    ) in compact_output
+    assert _compact_terminal_output(_repo_venv_activate_hint(str(repo))) in compact_output
     dynamic_run.assert_called_once()
 
 
@@ -1028,11 +1039,12 @@ def test_cli_sync_rejects_removed_full_with_tests_alias(tmp_path: Path) -> None:
     (repo / ".repograph").mkdir()
     (repo / ".repograph" / "meta").mkdir()
 
-    result = CliRunner().invoke(app, ["sync", str(repo), "--full-with-tests"])
+    result = CliRunner().invoke(app, ["sync", str(repo), "--full-with-tests"], color=False)
 
     assert result.exit_code == 2
-    assert "No such option" in result.output
-    assert "--full-with-tests" in result.output
+    compact_output = _compact_terminal_output(result.output)
+    assert _compact_terminal_output("No such option") in compact_output
+    assert _compact_terminal_output("--full-with-tests") in compact_output
 
 
 def test_full_pipeline_applies_coverage_overlay_without_runtime_traces(tmp_path: Path) -> None:
