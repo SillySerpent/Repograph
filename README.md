@@ -18,7 +18,7 @@ RepoGraph is static-first, but `repograph sync --full` is the canonical full-pow
 
 ## Runtime And Dynamic Analysis
 
-RepoGraph’s runtime-aware full sync is not a sidecar toy feature. On merged master, the full-sync path can:
+RepoGraph’s runtime-aware full sync is a first-class capability in the current codebase. The full-sync path can:
 
 - detect repo-scoped live traced Python servers and prompt before attaching in the CLI
 - launch a managed traced Python server from configured settings, wait for readiness, and drive scenario URLs or a scenario-driver command
