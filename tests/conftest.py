@@ -1,10 +1,11 @@
 """Shared pytest configuration for RepoGraph tests (fixtures only).
 
-If the **repo root** has a ``conftest.py`` from ``repograph trace install``, pytest
-loads it first and that file starts/stops :class:`~repograph.runtime.tracer.SysTracer`
-for the whole session (see the generated file’s docstring). This module does not
-install tracing; see ``conftest_repograph_trace_install.example.py`` in the repo
-root for the template and how to remove tracing.
+If ``.repograph/conftest.py`` was written by ``repograph trace install``, pytest
+loads it and starts/stops :class:`~repograph.runtime.tracer.SysTracer` for the
+whole session (see the generated file’s docstring). This module does not install
+tracing; normal RepoGraph runtime capture happens through ``repograph sync --full``.
+Run ``repograph trace install`` only when you intentionally want a manual traced
+pytest session, or delete ``.repograph/conftest.py`` to remove it.
 """
 from __future__ import annotations
 
@@ -20,6 +21,9 @@ PYTHON_FLASK_FIXTURE = os.path.abspath(
 )
 JS_EXPRESS_FIXTURE = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "fixtures", "js_express"),
+)
+STRAYRATZ_FIXTURE = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "fixtures", "StrayRatz"),
 )
 
 
@@ -82,6 +86,34 @@ def js_express_store(tmp_path):
     rg_dir = str(tmp_path / ".repograph")
     config = RunConfig(
         repo_root=JS_EXPRESS_FIXTURE,
+        repograph_dir=rg_dir,
+        include_git=False,
+        include_embeddings=False,
+        full=True,
+    )
+    run_full_pipeline(config)
+    db = os.path.join(rg_dir, "graph.db")
+    store = GraphStore(db)
+    store.initialize_schema()
+    yield store
+    store.close()
+
+
+@pytest.fixture
+def strayratz_fixture_dir() -> str:
+    """Absolute path to ``tests/fixtures/StrayRatz``."""
+    return STRAYRATZ_FIXTURE
+
+
+@pytest.fixture
+def strayratz_store(tmp_path):
+    """Run full pipeline on ``StrayRatz`` and return an open :class:`GraphStore`."""
+    from repograph.graph_store.store import GraphStore
+    from repograph.pipeline.runner import RunConfig, run_full_pipeline
+
+    rg_dir = str(tmp_path / ".repograph")
+    config = RunConfig(
+        repo_root=STRAYRATZ_FIXTURE,
         repograph_dir=rg_dir,
         include_git=False,
         include_embeddings=False,
