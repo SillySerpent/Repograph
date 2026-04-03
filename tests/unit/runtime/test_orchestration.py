@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from repograph.runtime.live_session import ActiveTraceSession, register_live_trace_session
 from repograph.runtime.orchestration import (
@@ -108,6 +109,26 @@ def test_detect_live_targets_ignores_internal_repograph_runtime_artifacts(tmp_pa
     assert targets[0].port == 5002
 
 
+def test_detect_live_targets_uses_wide_process_listing(monkeypatch, tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    seen: dict[str, object] = {}
+
+    def _fake_run(command, *, capture_output, text, check):
+        seen["command"] = command
+        assert capture_output is True
+        assert text is True
+        assert check is True
+        return SimpleNamespace(stdout="")
+
+    monkeypatch.setattr("repograph.runtime.orchestration.subprocess.run", _fake_run)
+
+    targets = detect_live_targets(str(repo.resolve()))
+
+    assert targets == ()
+    assert seen["command"] == ["ps", "-axww", "-o", "pid=", "-o", "command="]
+
+
 def test_resolve_runtime_plan_records_live_targets_when_falling_back_to_tests(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo_root = str(repo.resolve())
@@ -132,6 +153,45 @@ def test_resolve_runtime_plan_records_live_targets_when_falling_back_to_tests(tm
     assert plan.attach_decision.attach_mode == "attach_live_python"
     assert plan.attach_decision.target is not None
     assert plan.attach_decision.target.port == 5001
+
+
+def test_resolve_runtime_plan_selects_live_session_target_when_command_lacks_repo_path(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo_root = str(repo.resolve())
+    rg_dir = repo / ".repograph"
+    rg_dir.mkdir(parents=True)
+    live_trace = rg_dir / "runtime" / "live" / "sitecustomize.jsonl"
+    live_trace.parent.mkdir(parents=True)
+    live_trace.write_text('{"kind":"session"}\n', encoding="utf-8")
+    register_live_trace_session(
+        str(rg_dir),
+        ActiveTraceSession(
+            pid=101,
+            repo_root=repo_root,
+            trace_path=str(live_trace),
+            started_at=1.0,
+            session_name="sitecustomize",
+            python_version="3.12.4",
+        ),
+    )
+
+    plan = resolve_runtime_plan(
+        repo_root,
+        repograph_dir=str(rg_dir),
+        process_rows=[(101, "python run.py --port 5001")],
+        attach_policy="always",
+    )
+
+    assert plan.mode == "attach_live_python"
+    assert plan.resolution == "live_target_attach"
+    assert plan.attach_decision.outcome == "selected"
+    assert plan.attach_decision.target is not None
+    assert plan.attach_decision.target.pid == 101
+    assert plan.attach_decision.target.association == "live_session"
+    assert plan.attach_decision.target.port == 5001
+    assert plan.probe_url == "http://127.0.0.1:5001/"
 
 
 def test_resolve_runtime_plan_selects_attachable_live_python_target(tmp_path: Path) -> None:
