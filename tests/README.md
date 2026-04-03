@@ -2,16 +2,33 @@
 
 ## Running
 
-After ``pip install -e ".[dev]"``, the package installs a ``pytests`` command that is equivalent to the ``pytest`` CLI (same ``[tool.pytest.ini_options]`` defaults). From the repo root, ``pytests`` with no arguments runs the full suite under ``tests/``.
+After installing any dev-capable tier such as `pip install -e ".[dev]"` or the
+full workstation bundle, the package installs a `pytests` command that is
+equivalent to the `pytest` CLI (same `[tool.pytest.ini_options]` defaults).
+From the repo root, either `pytests` or `python -m pytest tests/ -q` runs the
+full suite under `tests/`.
+
+For the broadest local baseline, install the **Full local workstation** tier:
 
 ```bash
-# Full suite (default: ``tests/`` only; see ``pyproject.toml``)
-pytests
-# or: pytest tests/ -v
+python -m pip install -e ".[dev,community,mcp,templates,embeddings]"
+```
 
-# Coverage (``[tool.coverage.*]`` in ``pyproject.toml``)
+That is the recommended setup if you want the best chance of reproducing the
+current verified baseline of over **1.24k passing tests**. If you also run the
+optional Pyright quality test, install Node.js so `npx` is available.
+
+```bash
+# Full suite
+python -m pytest tests/ -q
+# or:
+pytests
+
+# Coverage (`[tool.coverage.*]` in `pyproject.toml`)
 pytests --cov=repograph --cov-report=term-missing
 ```
+
+The checked-in suite is large enough to matter operationally: the current verified baseline is over 1.24k tests passing.
 
 ## Markers
 
@@ -44,6 +61,15 @@ Use layered jobs so failures are isolated and fast to triage:
 3. **integration**: `pytest tests/integration/ -q`
 4. **full** (nightly/release): `pytest tests/ -q`
 
+Equivalent RepoGraph CLI profiles:
+
+```bash
+repograph test --profile unit-fast
+repograph test --profile plugin-dynamic
+repograph test --profile integration
+repograph test --profile full
+```
+
 ## Full sync vs incremental parity (expectations)
 
 Do **not** expect bit-identical graphs when comparing **full** vs **incremental** sync, or when **p09** uses **Leiden** vs the **connected-components fallback** (optional ``leidenalg`` / ``igraph``).
@@ -54,12 +80,11 @@ Do **not** expect bit-identical graphs when comparing **full** vs **incremental*
 
 ## Session tracing (optional)
 
-Start with ``repograph sync --full`` for the normal runtime-overlay workflow.
+Start with `repograph sync --full` for the normal runtime-aware workflow.
 Default pytest runs do **not** install ``SysTracer`` on their own. If you
-explicitly want a manual traced pytest session, run ``repograph trace install``
-from the repo root — this writes ``.repograph/conftest.py`` which pytest
-discovers automatically. Traces land under
-``<repograph_dir>/runtime/*.jsonl``.
+explicitly want a manual traced pytest session, run `repograph trace install`
+from the repo root. This writes `.repograph/conftest.py`, which pytest
+discovers automatically. Traces land under `<repograph_dir>/runtime/*.jsonl`.
 
 ## StrayRatz runtime workflows
 
