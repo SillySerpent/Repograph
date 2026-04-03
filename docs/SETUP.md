@@ -41,6 +41,11 @@ Adds every optional dependency. This is the heaviest setup because embeddings pu
 python -m pip install -e ".[dev,community,mcp,templates,embeddings]"
 ```
 
+This is the recommended local baseline when you want the best chance of
+matching the current verified suite of over **1.24k passing tests**. If you
+also run the optional Pyright quality test, install Node.js so `npx` is
+available.
+
 ## Environment doctor
 
 Run the doctor when setup/import/database behavior looks wrong.
@@ -68,24 +73,26 @@ For routine local use, the canonical first full build is:
 ./run.sh sync --full
 ```
 
-This performs a full static rebuild and, when pytest discovery succeeds, also
-runs traced tests and merges runtime observations into the same index. Once the
-repo venv shell is active, bare `repograph sync --full` is equivalent. Use
-`./run.sh sync --static-only` when you explicitly want a pure static rebuild
-that skips both automatic test execution and any merge of on-disk
-runtime/coverage inputs.
+This always performs a full static rebuild first. When `auto_dynamic_analysis`
+is enabled, RepoGraph then resolves the best eligible runtime path for the repo:
+attach to one safe live traced Python target, launch a managed traced Python
+server, run traced tests, or merge existing runtime/coverage inputs when fresh
+execution is skipped or unavailable. Once the repo venv shell is active, bare
+`repograph sync --full` is equivalent. Use `./run.sh sync --static-only` when
+you explicitly want a pure static rebuild that skips both automatic runtime
+execution and any merge of on-disk runtime/coverage inputs.
 
 ## Runtime trace tuning (advanced/manual)
 
 Start with `./run.sh sync --full`. That is the normal full-power path and the
-only workflow routine users should need. When live repo-scoped servers are
+only workflow routine most users should need. When live repo-scoped servers are
 present, RepoGraph reports the attach decision explicitly. A single repo-scoped
-Python server can be attached automatically only when it is already publishing
-a RepoGraph live trace session; otherwise RepoGraph explains why attach was
-unavailable or ambiguous before falling back to a managed runtime or traced
-tests. If an approved live attach attempt later fails, RepoGraph records that
-failed attach attempt and continues with the next eligible fallback mode when
-one is available. Once the repo venv shell is active, bare `repograph sync --full`
+Python server can be attached only when it is already publishing a RepoGraph
+live trace session; otherwise RepoGraph explains why attach was unavailable or
+ambiguous before falling back to a managed runtime, traced tests, or existing
+inputs. If an approved live attach attempt later fails, RepoGraph records that
+failure explicitly and continues with the next eligible fallback mode when one
+is available. Once the repo venv shell is active, bare `repograph sync --full`
 uses the same interpreter.
 
 Use the `trace` subcommands below only when you intentionally need manual
