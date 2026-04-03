@@ -1,172 +1,149 @@
 # Surfaces: Python API, CLI, and MCP
 
-RepoGraph exposes one implementation layer — **`RepoGraphService`** (`repograph/services/repo_graph_service.py`) — through three surfaces. They are **not** feature-identical: the **CLI** and **Python API** are broad, while **MCP** is intentionally curated for agent workflows.
+RepoGraph exposes one implementation layer, **`RepoGraphService`** (`repograph/services/repo_graph_service.py`), through three user-facing surfaces. They are related, but not feature-identical: the CLI and Python API are broad, while MCP is intentionally curated for agent workflows.
 
-All three surfaces live under **`repograph/surfaces/`**. The entry-point for each is:
+For the broadest validated local baseline across those surfaces, use the
+**Full local workstation** install tier described in [`SETUP.md`](SETUP.md) if
+you want the best chance of reproducing the current verified suite of over
+**1.24k passing tests** locally. Install Node.js as well only if you plan to
+run the optional Pyright quality gate.
+
+## Entrypoint map
+
+The installed console script is `repograph = repograph.entry:main`.
+
+`repograph.entry` dispatches to:
+
+- `repograph.surfaces.cli` for the Typer CLI
+- `repograph.interactive.main` for `repograph menu`
+- `setup-verify` helpers for editable-install verification
+
+The surface entrypoints in the codebase are:
 
 | Surface | Entry point |
-|---------|-------------|
+|---|---|
 | Python API | `repograph.surfaces.api.RepoGraph` |
-| CLI | `repograph.surfaces.cli` (Typer app) |
+| CLI | `repograph.surfaces.cli` |
 | MCP | `repograph.surfaces.mcp.server.create_server` |
+
+All three sit on top of the same `RepoGraphService`.
 
 ## Python API
 
-- Entry point: **`RepoGraph`** (`repograph/surfaces/api.py`).
-- It delegates every attribute to **`RepoGraphService`** via `__getattr__`, so the public surface matches the service's public methods (sync, pathways, dead_code, full_report, etc.).
-- Use this for scripts, tests, and applications embedding RepoGraph.
-- When no structured-log session is active, read/query calls open one automatically under
-  `.repograph/logs/` and keep it for the lifetime of the `RepoGraph` / `RepoGraphService`
-  instance. Using `with RepoGraph(...) as rg:` keeps related queries in the same session.
-- `RepoGraph.sync(full=True)` remains a **static** full rebuild and does not run
-  tests automatically. If runtime inputs already exist (`.repograph/runtime/*`
-  or `coverage.json`), the sync can still merge them. The one-shot automatic
-  traced-test workflow is the CLI command **`repograph sync --full`** when
-  `auto_dynamic_analysis` is enabled.
-- `RepoGraphService.search()` / `RepoGraph.search()` is currently a lighter
-  service-side name/keyword lookup. The richer hybrid concept/pathway search
-  surface is the CLI command **`repograph query`**.
+- Entry point: [`repograph/surfaces/api.py`](../repograph/surfaces/api.py)
+- `RepoGraph` delegates to `RepoGraphService`, so the public API tracks service methods such as `sync`, `pathways`, `dead_code`, `impact`, and `full_report`
+- Best fit for scripts, tests, and applications embedding RepoGraph directly
+- Read/query calls open an observability session automatically when none is active and keep it for the lifetime of the `RepoGraph` / `RepoGraphService` instance
+
+### Full sync behavior in the API
+
+`RepoGraph.sync(full=True)` now follows the same runtime-aware full-sync path as the CLI when `auto_dynamic_analysis` is enabled. That means a full API sync can:
+
+- resolve a runtime plan through the same orchestration layer as the CLI
+- reuse existing runtime/coverage inputs
+- launch a managed traced runtime
+- run traced tests
+- attach to an eligible live traced Python target when the runtime contract and `attach_policy` allow it
+
+Use `attach_policy="always"` or `attach_policy="never"` for unattended API callers that should not rely on a CLI confirmation prompt.
 
 ### Settings methods
 
-`RepoGraph` exposes settings methods that delegate to `repograph.settings`:
+`RepoGraph` also exposes settings methods that delegate to `repograph.settings`:
 
 ```python
 rg = RepoGraph("/path/to/repo")
-rg.list_config()                          # → dict of all settings
-rg.describe_config("include_git")         # → schema/default/current/lifecycle metadata
-rg.get_config("include_git")              # → current value
-rg.set_config("include_git", False)       # persists a runtime override in .repograph/settings.json
-rg.unset_config("include_git")            # removes one runtime override
-rg.reset_config()                         # clears overrides, keeps the settings document
+rg.list_config()
+rg.describe_config("include_git")
+rg.get_config("include_git")
+rg.set_config("include_git", False)
+rg.unset_config("include_git")
+rg.reset_config()
 ```
 
 ## CLI
 
-- Entry point: Typer app assembled in **`repograph/surfaces/cli/__init__.py`** (`repograph` console script).
-- Commands are split across **`repograph/surfaces/cli/commands/`**: sync, query, report, analysis, trace, config, export, mcp_cmd, admin.
-- Output helpers live in **`repograph/surfaces/cli/output.py`**.
-- `repograph query` is the richer hybrid search surface: keyword ranking,
-  fuzzy name matching, pathway matching, and optional semantic ranking when
-  embeddings are available.
-- Details: **`docs/CLI_REFERENCE.md`**.
+- Entry point: [`repograph/surfaces/cli/__init__.py`](../repograph/surfaces/cli/__init__.py)
+- Typer app assembly: [`repograph/surfaces/cli/app.py`](../repograph/surfaces/cli/app.py)
+- Commands are split across [`repograph/surfaces/cli/commands/`](../repograph/surfaces/cli/commands/)
+- Output helpers live in [`repograph/surfaces/cli/output.py`](../repograph/surfaces/cli/output.py)
 
-### Advanced trace subcommands
+Stable day-to-day command families:
 
-Start with **`repograph sync --full`**. `trace install`, `trace collect`, and
-`trace report` are secondary diagnostics for cases where you want explicit
-instrumentation control or need to inspect raw trace payloads yourself.
+- sync and admin: `init`, `sync`, `status`, `watch`, `clean`, `doctor`, `test`
+- exploration: `summary`, `report`, `modules`, `node`, `query`, `impact`
+- architecture and evidence: `config`, `config-registry`, `invariants`, `test-map`, `events`, `interfaces`, `deps`
+- pathways: `pathway list`, `pathway show`, `pathway update`
+- runtime diagnostics: `trace install`, `trace collect`, `trace report`, `trace clear`
+- integrations: `mcp`, `export`
 
-Use **`repograph trace collect`** (not `collection`) when you want a read-only
-inventory of already-collected JSONL under **`.repograph/runtime/`**. Manual
-traces are merged on the next `sync` when that directory has data. Coverage
-overlay is also opportunistic: drop `coverage.json` in the repo root before
-sync if you want `is_covered` fields populated.
+### Full sync contract
 
-Long-running live Python processes instrumented via `sitecustomize` publish
-their raw trace stream under **`.repograph/runtime/live/`** plus a live-session
-marker. `repograph sync --full` can prompt before capturing a current attach
-delta from those processes; unattended/API usage should preconfigure
-`sync_runtime_attach_policy` to `always` or `never`. `trace collect` reports
-live-session traces separately from the
-overlay-ready top-level runtime inputs.
-If a selected live attach attempt later fails, RepoGraph records that failed
-attempt explicitly and then tries the next eligible managed-runtime or traced-
-test fallback path instead of pretending attach succeeded.
+`repograph sync --full` is the canonical full-power operator path. When `auto_dynamic_analysis` is enabled, it uses the runtime orchestration layer to choose among:
 
-Instrumentation files (`conftest.py`, `sitecustomize.py`) are written to
-**`.repograph/`**, not the repo root. Pytest discovers `.repograph/conftest.py`
-automatically when run from the repo root.
+- attach to one safe repo-scoped live traced Python target
+- launch a managed traced Python server from settings
+- run a traced test command
+- merge existing runtime and coverage inputs when fresh execution is skipped or unavailable
+- complete statically while recording why runtime analysis did not run
+
+`repograph sync --static-only` is the explicit static-only override.
+
+### Trace subcommands
+
+Start with `repograph sync --full`. `trace install`, `trace collect`, and `trace report` are secondary diagnostics for cases where you want manual instrumentation control, want to inspect raw trace payloads, or are debugging automatic runtime capture.
+
+- `trace install` writes instrumentation under `.repograph/`
+- `trace collect` inventories collected JSONL inputs, including live-session traces
+- `trace report` inspects overlay findings without requiring a new full rebuild
+
+Coverage overlay is also opportunistic: if `coverage.json` exists at the repo root when sync runs, RepoGraph can merge coverage evidence alongside runtime evidence.
 
 ## MCP server
 
-- Factory: **`repograph/surfaces/mcp/server.py`** → **`create_server(service: RepoGraphService)`**.
-- NL query engine: **`repograph/surfaces/mcp/nl_query.py`** → **`NLQueryEngine`**.
-- **Intentionally** exposes fewer tools than the CLI/API. There is **no** `sync` or `full_report` tool on MCP by default.
-- **Default alignment:** `get_dead_code` uses the same **`dead_code`** tier default as **`RepoGraphService.dead_code()`** — **`min_tier="probably_dead"`** (see service docstring for tier meanings).
-- **`impact`** MCP tool returns a **stable** shape: `symbol`, `will_break`, `may_break`, `warnings`, plus `error` or `ambiguous` when applicable. Symbol lookup now prefers exact file/qualified/simple-name matches before falling back to fuzzy search, and ambiguous matches are surfaced explicitly rather than guessed.
+- Factory: [`repograph/surfaces/mcp/server.py`](../repograph/surfaces/mcp/server.py)
+- NL query engine: [`repograph/surfaces/mcp/nl_query.py`](../repograph/surfaces/mcp/nl_query.py)
+- MCP intentionally exposes fewer tools than the CLI/API; there is no general `sync` or `full_report` tool by default
+- Default transport is stdio; `repograph mcp --port <n>` switches to streamable HTTP
 
-### MCP tools (current)
+### MCP tools and resources
 
-| Tool | Maps to service (approx.) |
-|------|-----------------------------|
-| `list_pathways` | `pathways(min_confidence=0.0, include_tests=True)` |
-| `get_pathway` | `pathway_document(name)` |
-| `get_node` | `node(identifier)` |
-| `get_dependents` | `dependents(symbol, depth=depth)` |
-| `get_dependencies` | `dependencies(symbol, depth=depth)` |
-| `search` | `search(query, limit=limit)` |
-| `impact` | `impact(symbol)` (normalized for MCP) |
-| `trace_variable` | `trace_variable(variable_name)` |
-| `get_entry_points` | `entry_points()` with configured default limit, or `entry_points(limit=limit)` when provided |
-| `get_dead_code` | `dead_code()` with service default tier |
-| `list_log_sessions` | `list_log_sessions()` |
-| `get_errors` | `get_recent_errors(run_id)` |
-| `get_log_subsystem` | `get_log_session(run_id, subsystem)` |
-| `query_graph` | NL→Cypher translation via Anthropic API (requires `anthropic` + `ANTHROPIC_API_KEY`) |
-| `get_config` | Read the current effective value from `.repograph/settings.json` / YAML / defaults |
-| `set_config` | Write a runtime override to `.repograph/settings.json` |
+Current MCP tool families include:
 
-Resources: `repograph://overview`, `.../pathways`, `.../communities`, `.../schema`, `.../settings`.
+- pathway and symbol reads: `list_pathways`, `get_pathway`, `get_node`, `search`
+- impact and graph relations: `impact`, `get_dependents`, `get_dependencies`, `trace_variable`, `get_entry_points`, `get_dead_code`
+- settings access: `get_config`, `describe_config`, `set_config`, `unset_config`
+- observability access: `list_log_sessions`, `get_errors`, `get_log_subsystem`
+- NL graph querying: `query_graph`
 
-`search` in MCP delegates to the service `search()` method, so it is narrower
-than the CLI `repograph query` command. Use `query_graph` when you want
-natural-language graph questions rather than name/keyword lookup.
+Current resources include:
 
-### `query_graph` — natural language queries
+- `repograph://overview`
+- `repograph://pathways`
+- `repograph://communities`
+- `repograph://schema`
+- `repograph://settings`
 
-Translates a plain-English question about the codebase into a KuzuDB Cypher query and returns results:
-
-```python
-result = mcp.query_graph("Which API functions are not covered by tests?")
-# {
-#   "question": "...",
-#   "cypher": "MATCH (f:Function) WHERE f.layer = 'api' AND f.is_covered = false RETURN ...",
-#   "explanation": "Returns uncovered API layer functions",
-#   "rows": [...],
-#   "row_count": 12,
-#   "truncated": false,
-#   "error": null
-# }
-```
-
-`is_covered` queries are only meaningful after the coverage overlay has run.
-Check `repograph://overview` or `status()["health"]["analysis_readiness"]`
-before treating uncovered-function results as authoritative.
-
-The generated Cypher is always read-only — queries containing `CREATE`, `SET`, `DELETE`, `MERGE`, or `DETACH` are refused before execution. Model defaults to `claude-haiku-4-5-20251001`; override with `REPOGRAPH_NL_MODEL` env var.
-
----
+`impact` returns a stable MCP-normalized shape with `symbol`, `will_break`, `may_break`, `warnings`, and optional `error` / `ambiguous`.
 
 ## Naming: parsing vs plugins
 
 | Name | Location | Role |
-|------|----------|------|
-| **`BaseParser`** | `repograph/parsing/base.py` | Abstract tree-sitter-backed parser for one language; **not** a plugin. |
-| **`ParserPlugin`** | `repograph/core/plugin_framework/contracts.py` | Plugin contract: `parse_file`, manifest, hooks. |
-| **`ParserAdapter`** | `repograph/plugins/parsers/base.py` | Wraps a `BaseParser` factory so it registers as a `ParserPlugin`. |
-| **Language implementations** | `repograph/plugins/parsers/<lang>/` | `build_plugin()` → `ParserAdapter` or custom `ParserPlugin`. |
+|---|---|---|
+| `BaseParser` | `repograph/parsing/base.py` | Abstract tree-sitter-backed parser for one language; not a plugin |
+| `ParserPlugin` | `repograph/core/plugin_framework/contracts.py` | Plugin contract with `parse_file`, manifest, and hooks |
+| `ParserAdapter` | `repograph/plugins/parsers/base.py` | Wraps a `BaseParser` factory so it registers as a `ParserPlugin` |
+| Language implementations | `repograph/plugins/parsers/<lang>/` | `build_plugin()` returns a `ParserAdapter` or custom `ParserPlugin` |
 
-**`parse_file`** appears at multiple layers: the pipeline calls the **parser registry**'s `parse_file`, which delegates to the right **`ParserPlugin.parse_file`**, which uses **`BaseParser.parse_file`** internally for language parsers.
+`parse_file` appears at multiple layers: the pipeline calls the parser registry’s `parse_file`, which delegates to the right `ParserPlugin.parse_file`, which uses `BaseParser.parse_file` internally for language-specific parsing.
 
----
+## Diagnostics and logging
 
-## Diagnostics & impact tags
-
-- **`repograph doctor`** is implemented in **`repograph/diagnostics/env_doctor.py`** (`run_doctor`, `collect_doctor_results`).
-- **Impact API warnings** (strings like `static_call_graph_only`) are built in **`repograph/diagnostics/impact_warnings.py`** and attached to **`RepoGraphService.impact()`** / MCP `impact` tool responses.
-
-## Logging
-
-User-visible messages for CLI sync use **`repograph.utils.logging`**: Rich output to **stderr**; this is **not** the stdlib `logging` module. **`warn_once`** deduplicates by the **full message string**. Plugin hook failures in the pipeline use **`warn`** per failure (see `repograph/pipeline/runner_parts/hooks.py`).
-
-Structured observability JSONL now covers more than sync:
-- `sync` opens a dedicated pipeline run with per-phase and hook-stage spans.
-- CLI read commands that bypass the service wrapper (for example `status`, `doctor`, `config`) open short-lived command sessions.
-- Python API and MCP read/query flows open a session automatically when none is active.
+- `repograph doctor` lives in `repograph/diagnostics/env_doctor.py`
+- Impact warnings such as `static_call_graph_only` are built in `repograph/diagnostics/impact_warnings.py`
+- User-visible CLI sync output uses `repograph.utils.logging` for Rich-rendered messages
+- Structured observability JSONL covers sync, CLI read commands, Python API reads, and MCP tool calls under `.repograph/logs/`
 
 ## Concurrency note
 
-CLI/API/MCP read surfaces open the existing graph without running schema DDL.
-That makes concurrent readers safe with each other, but writes (`sync`, `clean`)
-still require exclusive access to the `.repograph/graph.db` directory.
+CLI, API, and MCP read surfaces open the existing graph without running schema DDL. Concurrent readers are expected to be safe with each other, but writes (`sync`, `clean`, config mutations that trigger writes) still require exclusive writer access to `.repograph/graph.db`.
