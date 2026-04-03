@@ -8,6 +8,12 @@ repograph <command> [PATH] [OPTIONS]
 
 `PATH` defaults to the current working directory when omitted.
 
+For the broadest validated local baseline, use the **Full local workstation**
+install tier from [`SETUP.md`](SETUP.md) if you want the best chance of
+reproducing the current verified suite of over **1.24k passing tests**
+locally. Install Node.js as well only if you plan to run the optional Pyright
+quality gate.
+
 Read/query commands also emit structured observability sessions under
 `.repograph/logs/`. `sync` creates its own pipeline session; short direct
 commands such as `status` and `doctor` create shorter command sessions.
@@ -44,7 +50,7 @@ repograph sync [PATH] [OPTIONS]
 
 | Flag | Description |
 |------|-------------|
-| `--full` | Canonical one-shot full rebuild: rebuild static index, auto-run traced tests when available, then merge runtime overlay |
+| `--full` | Canonical one-shot full rebuild: rebuild static index, then resolve the best eligible automatic runtime path and merge resulting overlays |
 | `--static-only` | Force a pure static rebuild from scratch with **no** automatic test execution and **no** merge of on-disk runtime/coverage inputs |
 | `--embeddings` | Generate vector embeddings (requires `sentence-transformers`) |
 | `--no-git` | Skip git co-change coupling phase (Phase 12) |
@@ -63,7 +69,9 @@ Automatic dynamic-analysis command resolution for `--full`:
 
 If live attach is selected and later fails at execution time, RepoGraph records
 the failed attach attempt and then tries the next eligible managed-runtime or
-traced-test path instead of claiming the live attach succeeded.
+traced-test path instead of claiming the live attach succeeded. `status`,
+`summary`, and `report` surface the chosen mode, attach decision, fallback
+behavior, and whether runtime or coverage overlays were actually applied.
 
 ---
 
@@ -469,6 +477,11 @@ repograph test --profile plugin-dynamic -- -k runtime_overlay
 
 Because selection is path/marker-based, new tests are picked up automatically
 when they match those selectors.
+
+For the broadest local baseline, the easiest path is still the full workstation
+install tier from [`SETUP.md`](SETUP.md). The `full` profile runs the checked-in
+Python suite; the separate Pyright quality gate still requires Node.js with
+`npx`.
 
 Useful options:
 
