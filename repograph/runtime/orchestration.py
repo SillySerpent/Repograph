@@ -29,7 +29,7 @@ from repograph.runtime.attach import (
     default_probe_url,
     find_attach_strategy_for_target,
 )
-from repograph.runtime.live_session import read_live_trace_session
+from repograph.runtime.live_session import list_live_trace_sessions, read_live_trace_session
 from repograph.runtime.session import (
     AttachOutcome,
     DynamicInputInventory,
@@ -251,7 +251,7 @@ def dynamic_input_state(repo_root: str, repograph_dir: str) -> DynamicInputInven
 
 def _list_process_rows() -> list[tuple[int, str]]:
     result = subprocess.run(
-        ["ps", "-ax", "-o", "pid=", "-o", "command="],
+        ["ps", "-axww", "-o", "pid=", "-o", "command="],
         capture_output=True,
         text=True,
         check=True,
@@ -303,13 +303,10 @@ def _is_internal_repograph_runtime_artifact(command: str, repo_root: str) -> boo
     return f"{repo_root}/.repograph/" in normalized
 
 
-def _classify_live_target(command: str, repo_root: str) -> LiveTarget | None:
+def _classify_live_target_command(
+    command: str,
+) -> tuple[Literal["python", "node"] | None, str | None]:
     normalized = command.replace("\\", "/")
-    if not _command_references_repo(normalized, repo_root):
-        return None
-    if _is_internal_repograph_runtime_artifact(normalized, repo_root):
-        return None
-
     lowered = normalized.lower()
     runtime: Literal["python", "node"] | None = None
     kind: str | None = None
@@ -324,7 +321,7 @@ def _classify_live_target(command: str, repo_root: str) -> LiveTarget | None:
         runtime, kind = "python", "django"
     elif "-m http.server" in lowered:
         runtime, kind = "python", "http_server"
-    elif re.search(r"/(?:app|server|main|run)\.py\b", lowered):
+    elif re.search(r"(?:^|[\\/\s])(?:app|server|main|run)\.py\b", lowered):
         runtime, kind = "python", "python_server_script"
     elif "next dev" in lowered or "next start" in lowered:
         runtime, kind = "node", "next"
@@ -332,8 +329,20 @@ def _classify_live_target(command: str, repo_root: str) -> LiveTarget | None:
         runtime, kind = "node", "vite"
     elif "npm run dev" in lowered or "npm run start" in lowered:
         runtime, kind = "node", "npm_script"
-    elif re.search(r"/(?:server|app|main)\.(?:js|ts)\b", lowered):
+    elif re.search(r"(?:^|[\\/\s])(?:server|app|main)\.(?:js|ts)\b", lowered):
         runtime, kind = "node", "node_server_script"
+
+    return runtime, kind
+
+
+def _classify_live_target(command: str, repo_root: str) -> LiveTarget | None:
+    normalized = command.replace("\\", "/")
+    if not _command_references_repo(normalized, repo_root):
+        return None
+    if _is_internal_repograph_runtime_artifact(normalized, repo_root):
+        return None
+
+    runtime, kind = _classify_live_target_command(normalized)
 
     if runtime is None or kind is None:
         return None
@@ -348,9 +357,40 @@ def _classify_live_target(command: str, repo_root: str) -> LiveTarget | None:
     )
 
 
+def _classify_live_session_target(command: str, repo_root: str) -> LiveTarget | None:
+    """Fallback classifier for repo-associated live-session PIDs.
+
+    Some CI environments truncate or normalize `ps` command output enough that
+    the repo path disappears from the visible command line. When a PID is
+    already publishing a RepoGraph live-session marker for this repo, that
+    marker is the stronger association signal and the command no longer needs
+    to carry the repo path verbatim.
+    """
+    normalized = command.replace("\\", "/")
+    if _is_internal_repograph_runtime_artifact(normalized, repo_root):
+        return None
+
+    runtime, kind = _classify_live_target_command(normalized)
+    if runtime == "node":
+        return None
+    if runtime is None:
+        runtime = "python"
+        kind = "python_live_session"
+
+    return LiveTarget(
+        pid=0,
+        runtime=runtime,
+        kind=kind or "python_live_session",
+        command=command,
+        association="live_session",
+        port=_extract_port(command),
+    )
+
+
 def detect_live_targets(
     repo_root: str,
     *,
+    repograph_dir: str | None = None,
     process_rows: list[tuple[int, str]] | None = None,
 ) -> tuple[LiveTarget, ...]:
     """Detect live runtime processes that are confidently associated with the repo.
@@ -362,9 +402,17 @@ def detect_live_targets(
     """
     resolved_root = str(Path(repo_root).resolve()).replace("\\", "/")
     rows = process_rows if process_rows is not None else _list_process_rows()
+    live_session_pids: set[int] = set()
+    if repograph_dir is not None:
+        for session in list_live_trace_sessions(repograph_dir):
+            session_root = str(Path(session.repo_root).resolve()).replace("\\", "/")
+            if session_root == resolved_root:
+                live_session_pids.add(int(session.pid))
     targets: list[LiveTarget] = []
     for pid, command in rows:
         target = _classify_live_target(command, resolved_root)
+        if target is None and pid in live_session_pids:
+            target = _classify_live_session_target(command, resolved_root)
         if target is None:
             continue
         targets.append(
@@ -680,7 +728,11 @@ def resolve_runtime_plan(
         "sync_runtime_attach_policy",
         "prompt",
     )
-    detected_targets = detect_live_targets(repo_root, process_rows=process_rows)
+    detected_targets = detect_live_targets(
+        repo_root,
+        repograph_dir=resolved_repograph_dir,
+        process_rows=process_rows,
+    )
     attach_decision = _resolve_attach_decision(
         detected_targets,
         repograph_dir=resolved_repograph_dir,
