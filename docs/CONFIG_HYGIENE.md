@@ -117,11 +117,24 @@ from production files, optionally including test files.
 
 ## Standard Commands
 
-### Production-oriented sync (recommended default)
+### Canonical product sync
+
+```bash
+repograph sync --full
+```
+
+This is the normal operator path for RepoGraph as a whole. It keeps config
+registry generation aligned with the rest of the full repository view while
+still allowing runtime and coverage evidence when that workflow is enabled.
+
+### Pure static config-focused sync
 
 ```bash
 repograph sync --static-only
 ```
+
+Use this when you intentionally want to inspect config-oriented outputs without
+automatic runtime execution or overlay merge.
 
 ### Audit sync including test config usage
 
@@ -131,9 +144,11 @@ repograph sync --static-only --include-tests-config-registry
 
 ## CI Guidance (separate intent)
 
-Keep production and audit views separate in CI:
+Keep the normal product view and the wider audit view separate in CI:
 
 - Main CI / PR guardrail:
+  - `repograph sync --full`
+- Optional pure-static guardrail when you explicitly want no runtime execution:
   - `repograph sync --static-only`
 - Optional audit job (nightly or opt-in):
   - `repograph sync --static-only --include-tests-config-registry`
