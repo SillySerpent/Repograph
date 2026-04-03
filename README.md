@@ -1,8 +1,10 @@
 # RepoGraph
 
-RepoGraph is a local repository analysis project that builds and maintains a graph of a codebase. It is meant to be used against real repositories for code understanding, architecture inspection, impact analysis, and report generation.
+RepoGraph is a local repository-intelligence tool that builds and maintains a graph-backed model of a codebase for code understanding, architecture inspection, impact analysis, and AI-assisted context gathering.
 
-RepoGraph has both a static-analysis pipeline and a dynamic-analysis path. A static sync builds the repository graph from the source tree. `repograph sync --full` always rebuilds the static graph, and when `auto_dynamic_analysis` is enabled it will also try to collect traced tests and merge runtime/coverage inputs into the same index.
+RepoGraph is static-first, but `repograph sync --full` is the canonical full-power workflow. A full sync always rebuilds the static graph first. When `auto_dynamic_analysis` is enabled, RepoGraph then resolves the safest runtime path it can for the current repo: attaching to an eligible live traced Python server, launching a managed traced Python server, running traced tests, or merging existing runtime and coverage inputs when fresh execution is unavailable. `repograph sync --static-only` remains the explicit pure-static path when you want a rebuild with no automatic runtime execution or overlay merge.
+
+> Verified test baseline: the checked-in suite currently contains over 1.24k tests, and the latest full-suite run is green.
 
 ## What RepoGraph Covers
 
@@ -12,7 +14,19 @@ RepoGraph has both a static-analysis pipeline and a dynamic-analysis path. A sta
 - Show interface-to-implementation relationships, constructor dependencies, communities, and git co-change coupling
 - Generate module summaries, config registries, invariants, doc-reference warnings, test-reachability maps, and full reports
 - Run demand-side analyzers for private-surface access, config boundary reads, DB shortcuts, UI boundary paths, architecture conformance, class roles, config flow, module signals, and decomposition signals
-- Run dynamic analysis from traced tests and merge runtime overlay, coverage overlay, observed runtime findings, and runtime-quality diagnostics into the repository view
+- Merge runtime overlay, coverage overlay, observed runtime findings, and runtime-quality diagnostics into the same repository view
+
+## Runtime And Dynamic Analysis
+
+RepoGraph’s runtime-aware full sync is not a sidecar toy feature. On merged master, the full-sync path can:
+
+- detect repo-scoped live traced Python servers and prompt before attaching in the CLI
+- launch a managed traced Python server from configured settings, wait for readiness, and drive scenario URLs or a scenario-driver command
+- auto-detect a traced test command and run it under the repo interpreter
+- merge existing `.repograph/runtime/*.jsonl` and `coverage.json` inputs when fresh execution is skipped or unavailable
+- persist runtime provenance, attach decisions, scenario activity, fallback behavior, and overlay readiness into `health.json`, `status`, `summary`, and `report`
+
+Static analysis still remains the baseline. Runtime and coverage evidence augment the graph; they do not replace it.
 
 ## Language And Framework Coverage
 
@@ -23,51 +37,57 @@ RepoGraph has both a static-analysis pipeline and a dynamic-analysis path. A sta
 
 ## Quick Start
 
+Repo-local bootstrap:
+
 ```bash
 ./setup.sh
-./run.sh
+./run.sh sync --full
+./run.sh summary
 ```
 
-That path is useful if you want a guided setup and runner. In an interactive
-shell, `./setup.sh` now opens a repo-venv-backed subshell automatically after
-setup succeeds, and `./run.sh` always prefers `.venv/bin/python` when present.
+That path gives you the safest interpreter behavior because `./setup.sh` prepares the repo-local `.venv`, and `./run.sh` always prefers `.venv/bin/python` when present.
 
 If you prefer the CLI directly:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[dev,community]"
 repograph sync --full
 repograph summary
+repograph report
 ```
 
-If the repo has a local `.venv`, prefer `./run.sh ...` or activate that venv
-before using bare `repograph ...` so full-sync runtime analysis runs under the
-intended interpreter.
+If you want the broadest validated local environment and the best chance of
+matching the current verified baseline of over **1.24k passing tests**, prefer
+the **Full local workstation** tier instead:
 
-Requirements: Python 3.11+
+```bash
+python -m pip install -e ".[dev,community,mcp,templates,embeddings]"
+```
 
-`repograph init` is optional. It only creates the `.repograph/` layout ahead of time.
+Install Node.js as well if you plan to run the optional Pyright quality gate.
 
-## How It Is Usually Used
+Requirements: Python 3.11+. `repograph init` is optional; it only creates the `.repograph/` layout ahead of time.
 
-The usual flow is:
+## Typical Workflow
 
-1. Run `repograph sync --full` to build the graph and, when `auto_dynamic_analysis` is enabled, let RepoGraph choose a dynamic-analysis path. If exactly one repo-scoped Python server is already publishing a RepoGraph live trace session, the CLI prompts before attaching; unattended/API usage should preconfigure `sync_runtime_attach_policy` to `always` or `never`. Otherwise RepoGraph reports why attach was unavailable or ambiguous before falling back to a managed runtime or traced tests. If an approved live attach attempt later fails, RepoGraph records that failure explicitly and then tries the next eligible managed-runtime or traced-test path instead of silently pretending attach succeeded.
-2. Use commands like `summary`, `modules`, `pathway`, `node`, `query`, and `impact` to inspect the repository from different angles.
+The normal workflow is:
+
+1. Run `repograph sync --full` to rebuild the graph and let RepoGraph resolve the best available runtime path for the repo.
+2. Use `summary`, `report`, `modules`, `pathway`, `node`, `query`, and `impact` to inspect the repository from different angles.
 3. Re-run `sync` as the codebase changes, or use `watch` during active development.
 
-A simple exploration session might look like this:
+A routine exploration session looks like:
 
 ```bash
 repograph sync --full
 repograph summary
 repograph modules --issues
 repograph pathway list
-repograph pathway show <name>
 repograph impact <symbol>
+repograph report
 ```
 
-If you want a purely static rebuild, use:
+If you explicitly want a pure static rebuild:
 
 ```bash
 repograph sync --static-only
@@ -81,9 +101,9 @@ The CLI is the broadest day-to-day interface for local work.
 
 - repository lifecycle: `init`, `sync`, `status`, `watch`, `clean`
 - exploration: `summary`, `report`, `modules`, `node`, `query`, `impact`
-- architecture: `invariants`, `config`, `test-map`, `events`, `interfaces`, `deps`
+- architecture: `config`, `config-registry`, `invariants`, `test-map`, `events`, `interfaces`, `deps`
 - pathways: `pathway list`, `pathway show`, `pathway update`
-- advanced runtime diagnostics: `trace install`, `trace collect`, `trace report`, `trace clear`
+- runtime diagnostics: `trace install`, `trace collect`, `trace report`, `trace clear`
 - integrations and diagnostics: `mcp`, `export`, `doctor`, `test`
 
 Full command and flag reference: [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md)
@@ -104,11 +124,7 @@ with RepoGraph("/path/to/repo") as rg:
     print(rg.full_report())
 ```
 
-`RepoGraph` is a thin facade over the shared `RepoGraphService`, so the API, CLI, and MCP server all sit on the same implementation layer.
-
-`RepoGraph.sync(full=True)` follows the same full-power orchestration path as the CLI when `auto_dynamic_analysis` is enabled. That can include live attach, managed runtime execution, or traced tests depending on the runtime contract and `attach_policy`. If runtime traces or `coverage.json` already exist, sync can still merge those existing inputs when fresh execution is skipped or unavailable.
-
-`RepoGraph.search()` is the lighter service-side search surface. For the richer hybrid search flow, use the CLI `repograph query` command.
+`RepoGraph` is a thin facade over the shared `RepoGraphService`, so the API, CLI, and MCP server all sit on the same implementation layer. `RepoGraph.sync(full=True)` follows the same runtime-aware orchestration path as the CLI when `auto_dynamic_analysis` is enabled, and API callers can override attach behavior per call with `attach_policy`.
 
 Surface details: [`docs/SURFACES.md`](docs/SURFACES.md)
 
@@ -120,7 +136,7 @@ RepoGraph can also expose a curated MCP surface for AI tools:
 repograph mcp /path/to/repo
 ```
 
-The MCP surface is intentionally narrower than the CLI and Python API. It focuses on read/query workflows rather than exposing every operational command.
+The MCP surface is intentionally narrower than the CLI and Python API. It focuses on read/query workflows, observability access, and settings inspection rather than exposing every operational command.
 
 ### Interactive Menu
 
@@ -138,30 +154,16 @@ RepoGraph is organized around one shared service layer and a pipeline that write
 
 - `RepoGraphService` is the central implementation used by the CLI, Python API, and MCP server.
 - Core pipeline phases walk the repository, build file and folder nodes, parse supported languages, resolve imports and calls, detect callback registrations, track inheritance and variables, and write the graph incrementally into Kuzu through `GraphStore`.
-- After the core graph is built, plugin hooks run higher-level analyzers, evidence producers, dynamic analyzers, and exporters over the same store.
-- When runtime inputs exist, runtime and coverage overlays can be merged onto the static graph so the repository view includes both static structure and observed execution data.
+- `run_full_pipeline_with_runtime_overlay()` adds runtime planning and execution on top of the full static rebuild path.
+- Plugin hooks then run higher-level analyzers, evidence producers, dynamic analyzers, and exporters over the same store.
+- Health, trust, runtime-analysis, and readiness metadata are persisted so `status`, `summary`, `report`, and MCP consumers can tell what kind of evidence actually backed a result.
 
-In practice, that means the tool has a fairly clear split:
+In practice, that means the tool has a clean split:
 
-- the pipeline builds and updates the underlying graph
-- the service layer exposes that graph through different user-facing surfaces
-- plugins add analysis and export behavior without changing the core entry points
-
-The built-in plugin families registered in [`repograph/plugins/discovery.py`](repograph/plugins/discovery.py) are:
-
-- parsers: `python`, `javascript`, `typescript`
-- framework adapters: `flask`, `fastapi`, `react`, `nextjs`
-- sync-time analyzers: `pathways`, `dead_code`, `duplicates`, `event_topology`, `async_tasks`
-- evidence producers: `declared_dependencies`, `runtime_overlay`
-- dynamic analyzers: `runtime_overlay`, `coverage_overlay`, `runtime_quality`
-- exporters: `docs_mirror`, `pathway_contexts`, `agent_guide`, `modules`, `pathways`, `summary`, `config_registry`, `invariants`, `event_topology`, `async_tasks`, `entry_points`, `doc_warnings`, `runtime_overlay_summary`, `observed_runtime_findings`, `report_surfaces`
-- demand analyzers: `dead_code`, `private_surface_access`, `config_boundary_reads`, `db_shortcuts`, `ui_boundary_paths`, `duplicates`, `contract_rules`, `boundary_shortcuts`, `architecture_conformance`, `boundary_rules`, `class_roles`, `decomposition_signals`, `config_flow`, `module_component_signals`
-
-If you want the internal details, start here:
-
-- pipeline reference: [`docs/PIPELINE.md`](docs/PIPELINE.md)
-- surface boundaries: [`docs/SURFACES.md`](docs/SURFACES.md)
-- plugin authoring: [`docs/plugins/AUTHORING.md`](docs/plugins/AUTHORING.md)
+- the pipeline builds and updates the graph
+- the runtime layer augments it with observed evidence when available
+- the service layer exposes the result through different user-facing surfaces
+- plugins extend analysis and export behavior without changing the core entry points
 
 ## Documentation Map
 
@@ -169,17 +171,18 @@ If you want the internal details, start here:
 - Setup and install tiers: [`docs/SETUP.md`](docs/SETUP.md)
 - CLI flags and examples: [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md)
 - API, CLI, and MCP boundaries: [`docs/SURFACES.md`](docs/SURFACES.md)
-- Pipeline and hooks: [`docs/PIPELINE.md`](docs/PIPELINE.md)
+- Pipeline and runtime orchestration: [`docs/PIPELINE.md`](docs/PIPELINE.md)
 - Accuracy and known limits: [`docs/ACCURACY.md`](docs/ACCURACY.md)
 - Config ownership and generated artifact policy: [`docs/CONFIG_HYGIENE.md`](docs/CONFIG_HYGIENE.md)
+- Contribution workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Test layout and markers: [`tests/README.md`](tests/README.md)
 
 ## License
 
-RepoGraph is licensed under **GNU AGPL v3.0**.  
-See [`LICENSE`](LICENSE).
+RepoGraph is licensed under **GNU AGPL v3.0**. See [`LICENSE`](LICENSE).
 
 ---
 
 ## Development Notes
 
-RepoGraph is still under active development, so contributors should expect some internal details and interfaces to continue evolving. If you want the most stable branch for regular use, use `master`; that branch is intended to be the safest default. Other branches may contain work in progress, experiments, or changes that are not ready to depend on yet.
+RepoGraph is still under active development, so contributors should expect some internal details and interfaces to continue evolving. If docs and code disagree, treat the current code, `health.json`, CLI help, and `status` / `summary` / `report` output as source of truth.
