@@ -1,86 +1,54 @@
 # Contributing to RepoGraph
 
-Thank you for contributing. This document covers everything you need to get
-a development environment running, understand the codebase, and get a PR
-merged cleanly.
-
----
-
-## Table of Contents
-
-1. [Development Environment Setup](#development-environment-setup)
-2. [Running the Test Suite](#running-the-test-suite)
-3. [Code Style](#code-style)
-4. [Pipeline Architecture](#pipeline-architecture)
-5. [How to Add a New CLI Command](#how-to-add-a-new-cli-command)
-6. [How to Add a New Pipeline Phase](#how-to-add-a-new-pipeline-phase)
-7. [PR Checklist](#pr-checklist)
-8. [Issue References](#issue-references)
-
----
+This guide covers the current contributor workflow: setup, validation, where the live entry surfaces are in the codebase, and the docs/tests you are expected to update with your changes.
 
 ## Development Environment Setup
 
-**Requirements:** Python 3.11+, pip.
+Requirements: Python 3.11+.
+
+Fastest repo-local path:
 
 ```bash
-# Clone and enter the repo
 git clone <repo-url>
-cd repograph_improved
+cd <checkout-dir>
+./setup.sh
+```
 
-# Install in editable mode with all optional extras
-pip install -e ".[dev,community]"
+Recommended contributor baseline:
 
-# Verify the install
+```bash
+python -m pip install -e ".[dev,community,mcp,templates,embeddings]"
 repograph doctor
 ```
 
-The `dev` extra installs `pytest` and `pytest-cov`.  The `community` extra
-installs `leidenalg` and `igraph` for community detection.  See [`docs/SETUP.md`](docs/SETUP.md) for the full install-tier matrix.
+That is the safest contributor install when you want the best chance of
+matching the current verified baseline of over **1.24k passing tests**. If you
+prefer a lighter core contributor environment, `python -m pip install -e
+".[dev,community]"` remains valid for narrower work. Install Node.js as well if
+you plan to run the optional Pyright quality gate.
 
-To also enable the MCP server and vector embeddings:
+Useful extras when you are intentionally not using the full workstation tier:
 
-```bash
-pip install -e ".[dev,community,mcp,embeddings]"
-```
+- `.[mcp]` for the MCP server
+- `.[embeddings]` for semantic search/ranking
+- `.[templates]` for template-related extras
 
----
+See [`docs/SETUP.md`](docs/SETUP.md) for the full install-tier matrix.
 
 ## Running the Test Suite
 
-See **[`tests/README.md`](tests/README.md)** for markers (``integration``, ``dynamic``,
-``requires_mcp``, etc.), optional session tracing, and layout.
-For config ownership and generated `.repograph` artifact boundaries, see
-[`docs/CONFIG_HYGIENE.md`](docs/CONFIG_HYGIENE.md).
+See [`tests/README.md`](tests/README.md) for markers, session-tracing notes, and layout.
+
+Recommended local matrix:
 
 ```bash
-# All tests
-pytest tests/ -v
-
-# With coverage report
-pytest tests/ --cov=repograph --cov-report=term-missing
+python -m pytest tests/unit/ -q -m "not dynamic and not integration and not requires_mcp"
+python -m pytest tests/ -q -m "plugin or dynamic"
+python -m pytest tests/integration/ -q
+python -m pytest tests/ -q
 ```
 
-**Before every PR:** the full suite must pass with zero failures and zero
-new warnings.
-
-Recommended maintainable test matrix:
-
-```bash
-# Fast guardrail (unit + plugin dispatch)
-pytest tests/unit/ -q -m "not integration and not dynamic and not requires_mcp"
-
-# Dynamic/runtime surface
-pytest tests/ -q -m dynamic
-
-# Integration confidence
-pytest tests/integration/ -q
-
-# Full contract sweep (pre-release / CI nightly)
-pytest tests/ -q
-```
-
-Equivalent via CLI profiles:
+Equivalent CLI profiles:
 
 ```bash
 repograph test --profile unit-fast
@@ -89,168 +57,82 @@ repograph test --profile integration
 repograph test --profile full
 ```
 
-For local reproducibility, prefer the project venv:
+Optional type-check quality gate:
 
 ```bash
-source .venv/bin/activate
-python --version
+python -m pytest tests/quality/test_pyright_codebase.py -q -m pyright
 ```
 
----
+That test shells out to a pinned `npx pyright` run, so it requires Node.js with
+`npx` available.
 
-## Code Style
+## Codebase Orientation
 
-- **Formatter:** [Black](https://black.readthedocs.io/) — `black repograph/`
-- **Linter:** [Ruff](https://docs.astral.sh/ruff/) — `ruff check repograph/`
-- **Type hints:** required on all public function signatures
-- **Docstrings:** required on all public functions and classes (one-line minimum)
-- **No new top-level dependencies** without explicit discussion and
-  pyproject.toml update
+These are the high-value entry surfaces for contributors:
 
-Quick check before pushing:
+- Console entry: `repograph/entry.py`
+- CLI surface package: `repograph/surfaces/cli/`
+- Python API facade: `repograph/surfaces/api.py`
+- MCP surface: `repograph/surfaces/mcp/`
+- Shared service layer: `repograph/services/`
+- Pipeline facade: `repograph/pipeline/runner.py`
+- Focused runner implementation: `repograph/pipeline/runner_parts/`
+- Runtime orchestration and execution: `repograph/runtime/`
+- Settings system: `repograph/settings/`
+- Plugin families and lifecycle wiring: `repograph/plugins/`
 
-```bash
-black --check repograph/
-ruff check repograph/
-```
+If you are changing operator behavior, trace the real call path through the surface layer, `RepoGraphService`, runner/runtime orchestration, settings, tests, and docs before you edit.
 
----
+## Validation and Style Expectations
 
-## Pipeline Architecture
+- Keep public function signatures typed.
+- Add comments/docstrings only where they explain intent, invariants, or non-obvious constraints.
+- Do not add new top-level dependencies casually; update `pyproject.toml` and docs when you do.
+- The checked-in quality bar is driven primarily by tests and the pinned Pyright quality test, not a repo-wide Black/Ruff configuration in `pyproject.toml`.
+- If you change runtime behavior, update the operator-facing docs and health/report wording in the same change.
 
-RepoGraph analyses a repository in sequentially numbered phases. Each phase
-is a module in `repograph/pipeline/phases/` with a `run()` entry point.
+## How to Add or Change a CLI Command
 
-| Phase | Module | Description | Required |
-|-------|--------|-------------|----------|
-| p01 | `p01_walk.py` | File walk + gitignore | ✅ |
-| p02 | `p02_structure.py` | Folder tree | ✅ |
-| p03 | `p03_parse.py` | AST parsing for all languages | ✅ |
-| p04 | `p04_imports.py` | Import resolution | ✅ |
-| p05 | `p05_calls.py` | Call-graph resolution | ✅ |
-| p05b | `p05b_callbacks.py` | Callback / registration patterns | ✅ |
-| p06 | `p06_heritage.py` | Class inheritance (EXTENDS/IMPLEMENTS) | ✅ |
-| p07 | `p07_variables.py` | Variable tracking | ✅ |
-| p08 | `p08_types.py` | Type annotation analysis | ✅ |
-| p09 | `p09_communities.py` | Community detection (Leiden) | optional |
-| p10 | `p10_processes.py` | Entry-point scoring + pathway BFS | ✅ |
-| p11b | `plugins/static_analyzers/duplicates/` | Duplicate symbol detection | optional |
-| p12 | `p12_coupling.py` | Git co-change coupling | optional |
-| p13 | `p13_embeddings.py` | Vector embeddings | optional |
-| p14 | `p14_context.py` | Pathway context helpers (doc / prose) | optional |
-
-**After the graph build (`p01`–`p12`, optional `p13`):** sync-time analysis and
-artefacts run as **plugins** (`on_graph_built`, `on_evidence`, `on_export`) — e.g.
-dead code → `plugins/static_analyzers/dead_code/`, doc warnings →
-`plugins/exporters/doc_warnings/`. See `repograph/pipeline/README.md` and
-`docs/plugins/AUTHORING.md`.
-
-Phases are orchestrated in `repograph/pipeline/runner.py`. Optional phases and
-plugin hooks respect `--strict` / `--continue-on-error` where applicable.
-
----
-
-## How to Add a New CLI Command
-
-1. Add the command function to `repograph/cli.py` using the `@app.command()`
-   decorator (or `@pathway_app.command()` for pathway sub-commands).
-
-   ```python
-   @app.command()
-   def my_command(
-       path: Optional[str] = typer.Argument(None),
-       some_flag: bool = typer.Option(False, "--flag"),
-   ) -> None:
-       """One-line description shown in --help."""
-       root, store = _get_root_and_store(path)
-       # ... implementation
-   ```
-
-2. Add the corresponding method to `repograph/api.py` (`RepoGraph` class)
-   so the Python API stays in sync with the CLI.
-
-3. Document the command in:
-   - `README.md` — CLI command reference table
-   - `docs/CLI_REFERENCE.md` — full flag documentation with examples
-   - `CHANGELOG.md` — under `[Unreleased] → Added`
-
-4. Add at least one test that calls the API method directly (no CLI invocation
-   needed in unit tests).
-
----
+1. Start in `repograph/surfaces/cli/commands/` for the shipped CLI command path.
+2. If the change affects app assembly or shared CLI behavior, update `repograph/surfaces/cli/app.py` and related output/rendering helpers.
+3. If the change affects entry dispatch or menu presets, also audit `repograph/entry.py` and the interactive catalog.
+4. Wire the command to the real service/runtime architecture instead of duplicating business logic in the CLI.
+5. Update the relevant user docs in the same change:
+   - [`README.md`](README.md)
+   - [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md)
+   - [`docs/SURFACES.md`](docs/SURFACES.md)
+6. Add or update tests that cover the command contract directly.
 
 ## How to Add a New Pipeline Phase
 
-1. Create `repograph/pipeline/phases/pNN_name.py` where `NN` is the next
-   available phase number.
+1. Add the phase module under `repograph/pipeline/phases/`.
+2. Keep the phase focused on one responsibility and route persistence through `GraphStore`.
+3. Wire it through the current runner structure in `repograph/pipeline/runner.py` and the appropriate file in `repograph/pipeline/runner_parts/`.
+4. Update schema/query/write helpers when new node or edge types are introduced.
+5. Update [`docs/PIPELINE.md`](docs/PIPELINE.md).
+6. Add focused tests for the new phase behavior.
 
-2. Implement a `run(store: GraphStore, ...) -> None` entry point.  Follow the
-   existing pattern: pure function, no global state, all I/O through `store`.
+## Documentation Expectations
 
-3. Add the phase import and call to `runner.py` in both `run_full_pipeline()`
-   and `run_incremental_pipeline()`.  Wrap optional phases in
-   `_handle_optional_phase_failure()`.
+If behavior changes, update docs in the same PR. At minimum audit:
 
-4. If the phase stores new node or edge types, add the schema to
-   `repograph/graph_store/schema.py` and the query/write methods to the
-   appropriate `store_*.py` split file.
+- [`README.md`](README.md)
+- [`docs/README.md`](docs/README.md)
+- [`docs/SETUP.md`](docs/SETUP.md)
+- [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md)
+- [`docs/SURFACES.md`](docs/SURFACES.md)
+- [`docs/PIPELINE.md`](docs/PIPELINE.md)
+- [`docs/ACCURACY.md`](docs/ACCURACY.md)
+- [`docs/ACCURACY_CONTRACT.md`](docs/ACCURACY_CONTRACT.md)
+- [`docs/CONFIG_HYGIENE.md`](docs/CONFIG_HYGIENE.md) when settings or config ownership semantics change
+- [`tests/README.md`](tests/README.md) when test guidance changes
 
-5. Document the phase in `docs/PIPELINE.md`.
-
-6. Add unit tests to `tests/test_phase_NN_name.py`.
-
-7. Update `CHANGELOG.md`.
-
----
+When the root README links to a document, treat that linked document as part of the same documentation contract.
 
 ## PR Checklist
 
-Every PR must satisfy all of these before merge:
-
-- [ ] **All existing tests pass** — `pytest tests/ -v` exits 0
-- [ ] **New test(s) added** — at least one test covers the changed behaviour
-- [ ] **`CHANGELOG.md` updated** — entry added under `[Unreleased]`
-- [ ] **Docstrings present** — every new public function and class has a
-      docstring (one-line minimum)
-- [ ] **Type hints present** — every new public function has annotated
-      parameters and return type
-- [ ] **Black + Ruff clean** — `black --check` and `ruff check` both pass
-- [ ] **New CLI commands documented** — `README.md` and `docs/CLI_REFERENCE.md`
-      updated on the same PR
-- [ ] **New pipeline phases documented** — `docs/PIPELINE.md` updated
-
----
-
-## Issue References
-
-The improvement plan uses issue IDs to track work items.  Reference them in
-commit messages and PR titles:
-
-| ID | Description |
-|----|-------------|
-| F-01 | Test functions in production entry points |
-| F-02 | Utility module false-positive dead code |
-| F-03 | JS class methods in HTML-script files |
-| F-04 | ABC implementor scoring |
-| I-01 | `repograph modules` command |
-| I-02 | Docstring annotations in pathway steps |
-| I-03 | Duplicate canonical version guidance |
-| I-04 | `repograph config` command |
-| I-05 | Architectural invariant extraction (Phase 16) |
-| I-06 | Entry score breakdown (`--verbose`) |
-| I-07 | `repograph test-map` command |
-| H-01 | CHANGELOG.md |
-| H-02 | CONTRIBUTING.md |
-| H-03 | Phase numbering cleanup |
-| H-04 | Unit tests for scorer and dead-code classifier |
-| H-05 | README and docs completeness |
-
-Example commit message:
-
-```
-fix(dead-code): downgrade utility-module helpers to possibly_dead [F-02]
-
-Functions in utils/, helpers/, lib/, common/, shared/ with zero in-repo
-callers are now classified possibly_dead (utility_module_uncalled) rather
-than definitely_dead. Adds _is_utility_file() to repograph.utils.fs.
-```
+- [ ] Relevant tests pass for the touched behavior
+- [ ] New or changed behavior has regression coverage
+- [ ] Public-facing docs were updated together with the code
+- [ ] Type-check quality gate was considered when typed surfaces changed
+- [ ] No stale flags, workflows, or file-path references remain in the touched docs
