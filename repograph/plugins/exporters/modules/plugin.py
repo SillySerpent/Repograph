@@ -39,10 +39,10 @@ Output schema (``modules.json``)
 ``file_count`` duplicates ``prod_file_count`` for backward compatibility.
 """
 
-import os
+import ast
 from collections import defaultdict
 
-from repograph.config import DEFAULT_MODULE_EXPANSION_THRESHOLD as _DEFAULT_MODULE_EXPANSION_THRESHOLD
+from repograph.settings import DEFAULT_MODULE_EXPANSION_THRESHOLD as _DEFAULT_MODULE_EXPANSION_THRESHOLD
 from repograph.graph_store.store import GraphStore
 from repograph.core.plugin_framework import ExporterPlugin, PluginManifest as _Manifest
 from repograph.plugins.utils import write_meta_json
@@ -161,9 +161,6 @@ def _build_index(store: GraphStore, threshold: int) -> list[dict]:
                 if cls.get("name")
             ]
 
-        # Module summary: pull first docstring or __init__.py module docstring
-        summary = _extract_module_summary(module_dir, prod_files, store)
-
         # Aggregate dead code and duplicate counts
         dead_count = sum(dead_by_file[f["path"]] for f in prod_files)
         dup_count = sum(dup_count_by_file[f["path"]] for f in prod_files)
@@ -180,6 +177,18 @@ def _build_index(store: GraphStore, threshold: int) -> list[dict]:
             "tooling"
             if module_dir != "__root__" and classify_path(probe) != "production"
             else "production"
+        )
+        summary = _extract_module_summary(
+            module_dir,
+            prod_files,
+            fn_by_file=fn_by_file,
+            cls_by_file=cls_by_file,
+            key_classes=key_classes,
+            total_functions=total_fns,
+            class_count=len(all_cls_in_module),
+            dead_count=dead_count,
+            duplicate_count=dup_count,
+            category=category,
         )
         modules.append({
             "path": module_dir,
@@ -263,42 +272,110 @@ def _module_depth_and_parent(module_dir: str) -> tuple[int, str | None]:
 def _extract_module_summary(
     module_dir: str,
     prod_files: list[dict],
-    store: GraphStore,
+    *,
+    fn_by_file: dict[str, list[dict]] | None = None,
+    cls_by_file: dict[str, list[dict]] | None = None,
+    key_classes: list[str] | None = None,
+    total_functions: int = 0,
+    class_count: int = 0,
+    dead_count: int = 0,
+    duplicate_count: int = 0,
+    category: str = "production",
 ) -> str:
-    """Return a one-line summary for the module from its __init__.py docstring.
-
-    Falls back to the docstring of the most-called class in the module, then
-    to an empty string if nothing is available.
-    """
+    """Return a one-line summary for the module using progressively weaker evidence."""
     if module_dir == "__root__":
         return ""
 
-    # Try to fetch __init__.py module docstring via the graph
     init_path_candidates = [
-        f["path"] for f in prod_files
+        f.get("abs_path", "") for f in prod_files
         if f["path"].endswith("__init__.py")
     ]
-    for init_path in init_path_candidates:
-        try:
-            file_info = store.get_file(init_path)
-            if file_info and file_info.get("docstring"):
-                doc = file_info["docstring"].strip()
-                if doc:
-                    return _first_sentence(doc)
-        except Exception:
-            pass
+    for abs_path in init_path_candidates:
+        doc = _read_python_module_docstring(abs_path)
+        if doc:
+            return _first_sentence(doc)
 
-    # Fallback: first non-empty docstring from any function in the module
-    for f in prod_files:
-        try:
-            fns = store.get_functions_in_file(f["path"])
-            for fn in fns:
-                doc = fn.get("docstring") or ""
-                if doc.strip():
-                    return _first_sentence(doc.strip())
-        except Exception:
-            pass
+    candidate_files = _summary_candidate_files(
+        prod_files,
+        fn_by_file=fn_by_file,
+        cls_by_file=cls_by_file,
+    )
+    for file_entry in candidate_files:
+        doc = _read_python_module_docstring(file_entry.get("abs_path", ""))
+        if doc:
+            return _first_sentence(doc)
 
+    for file_entry in candidate_files:
+        class_doc = _read_first_class_docstring(file_entry.get("abs_path", ""))
+        if class_doc:
+            return _first_sentence(class_doc)
+
+    return _heuristic_module_summary(
+        prod_files,
+        key_classes=key_classes or [],
+        total_functions=total_functions,
+        class_count=class_count,
+        dead_count=dead_count,
+        duplicate_count=duplicate_count,
+        category=category,
+    )
+
+
+def _summary_candidate_files(
+    prod_files: list[dict],
+    *,
+    fn_by_file: dict[str, list[dict]] | None = None,
+    cls_by_file: dict[str, list[dict]] | None = None,
+) -> list[dict]:
+    """Return non-``__init__`` production files ordered by likely summary usefulness."""
+    fn_by_file = fn_by_file or {}
+    cls_by_file = cls_by_file or {}
+
+    def _rank(file_entry: dict) -> tuple[int, int, int, str]:
+        path = file_entry.get("path", "")
+        fn_count = len(fn_by_file.get(path, []))
+        cls_count = len(cls_by_file.get(path, []))
+        line_count = int(file_entry.get("line_count") or 0)
+        return (-fn_count, -cls_count, -line_count, path)
+
+    return sorted(
+        [
+            file_entry
+            for file_entry in prod_files
+            if not (file_entry.get("path", "") or "").endswith("__init__.py")
+        ],
+        key=_rank,
+    )
+
+
+def _read_python_module_docstring(abs_path: str) -> str:
+    if not abs_path:
+        return ""
+    try:
+        with open(abs_path, encoding="utf-8", errors="replace") as fh:
+            source = fh.read()
+        module = ast.parse(source)
+    except (OSError, SyntaxError):
+        return ""
+    doc = ast.get_docstring(module)
+    return doc.strip() if doc else ""
+
+
+def _read_first_class_docstring(abs_path: str) -> str:
+    if not abs_path:
+        return ""
+    try:
+        with open(abs_path, encoding="utf-8", errors="replace") as fh:
+            source = fh.read()
+        module = ast.parse(source)
+    except (OSError, SyntaxError):
+        return ""
+
+    for node in module.body:
+        if isinstance(node, ast.ClassDef):
+            doc = ast.get_docstring(node)
+            if doc:
+                return doc.strip()
     return ""
 
 
@@ -312,6 +389,51 @@ def _first_sentence(text: str) -> str:
     # No sentence-ending period — return the first line capped at 120 chars
     first_line = text.split("\n")[0].strip()
     return first_line[:120]
+
+
+def _heuristic_module_summary(
+    prod_files: list[dict],
+    *,
+    key_classes: list[str],
+    total_functions: int,
+    class_count: int,
+    dead_count: int,
+    duplicate_count: int,
+    category: str,
+) -> str:
+    """Return a compact structural fallback when docstring evidence is absent."""
+    if not prod_files:
+        return ""
+
+    parts = [
+        (
+            f"{'Tooling' if category == 'tooling' else 'Production'} module with "
+            f"{len(prod_files)} file{'s' if len(prod_files) != 1 else ''}"
+        )
+    ]
+    activity: list[str] = []
+    if total_functions:
+        activity.append(f"{total_functions} function{'s' if total_functions != 1 else ''}")
+    if class_count:
+        activity.append(f"{class_count} class{'es' if class_count != 1 else ''}")
+    if activity:
+        parts[0] += " containing " + " and ".join(activity)
+    parts[0] += "."
+
+    if key_classes:
+        shown = ", ".join(key_classes[:2])
+        suffix = "..." if len(key_classes) > 2 else ""
+        parts.append(f"Key classes: {shown}{suffix}.")
+
+    issues: list[str] = []
+    if dead_count:
+        issues.append(f"{dead_count} dead-code signal{'s' if dead_count != 1 else ''}")
+    if duplicate_count:
+        issues.append(f"{duplicate_count} duplicate signal{'s' if duplicate_count != 1 else ''}")
+    if issues:
+        parts.append("Includes " + " and ".join(issues) + ".")
+
+    return " ".join(parts)[:220]
 
 
 def _write_json(payload, repograph_dir: str) -> None:

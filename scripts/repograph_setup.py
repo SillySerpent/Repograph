@@ -472,18 +472,25 @@ def main() -> None:
     if not args.skip_help:
         run_help(py, repo_root)
 
-    # Activation hint (non-fatal)
+    # Activation hint (non-fatal). `./setup.sh` can auto-enter a venv-backed
+    # shell in interactive sessions, but direct Python invocation still needs a
+    # manual activation path.
     if sys.platform == "win32":
         act = venv_path / "Scripts" / "activate.bat"
-        print(f"\nTo activate:  {act}")
+        print(f"\nManual activation:  {act}")
     else:
         act = venv_path / "bin" / "activate"
-        print(f"\nTo activate:  source {act}")
+        print(f"\nManual activation:  source {act}")
     print(
-        "\nQuick sync options:\n"
-        "  repograph sync                  # incremental\n"
-        "  repograph sync --full           # full rebuild\n"
-        "  repograph sync --full-with-tests  # full + pytest + trace merge\n"
+        "Interactive `./setup.sh` runs now open a venv-backed shell automatically "
+        "after setup succeeds."
+    )
+    print(
+        "\nQuick run options:\n"
+        "  ./run.sh sync                  # incremental (always prefers repo .venv)\n"
+        "  ./run.sh sync --full           # full rebuild\n"
+        "  ./run.sh sync --static-only    # full rebuild without automatic runtime analysis\n"
+        "  repograph sync --full          # safe once the repo venv shell is active\n"
     )
 
 

@@ -25,10 +25,12 @@ Use ``repograph test-map --any-call`` for a second metric: the share of **all** 
 ## What RepoGraph Knows
 
 RepoGraph always performs **static analysis** and can optionally augment it with
-**runtime overlay** evidence when traces have been merged into the graph (for
-example via `repograph sync --full`). Static analysis reads source files,
-builds a call graph, and applies heuristics; runtime overlay only adds evidence
-for functions and edges actually observed in collected traces.
+**runtime** and **coverage** overlays when those inputs are available. Static
+analysis reads source files, builds a call graph, and applies heuristics. The
+runtime overlay only adds evidence for functions and edges actually observed in
+collected traces; the coverage overlay only adds `is_covered` evidence when a
+valid `coverage.json` is present. `health.json` and `status()` expose whether
+those optional overlays were actually applied.
 
 | Category | What is known |
 |----------|--------------|
@@ -106,7 +108,7 @@ surfaces such as plugin factories and runtime bootstrap helpers are intentionall
 exempted where RepoGraph knows about them, but external/plugin-style dispatch
 can still require human review.
 
-**Runtime traces vs static dead code:** Sync runs static analyzers (including dead code) during `on_graph_built`, then runs dynamic overlay when `.repograph/runtime/*.jsonl` traces exist (`on_traces_collected`). The overlay resolves `call` records to graph functions and calls `apply_runtime_observation`, which clears `is_dead` and dead-code tier fields for those functions when the trace matches the current `source_hash`. Anything **not** seen in traces is unchanged by overlay—dynamic analysis does not “prove live” except through resolved JSONL `fn` → graph `qualified_name` matches. Later sync passes skip re-applying static dead flags while `runtime_observed_for_hash` still matches the file hash (see `repograph/plugins/static_analyzers/dead_code/plugin.py`). Full contract: `docs/ACCURACY_CONTRACT.md` (“Runtime traces merged into the graph”).
+**Runtime traces vs static dead code:** Sync runs static analyzers (including dead code) during `on_graph_built`, then runs dynamic analyzers during `on_traces_collected` when runtime inputs exist. The runtime overlay resolves `call` records to graph functions and calls `apply_runtime_observation`, which clears `is_dead` and dead-code tier fields for those functions when the trace matches the current `source_hash`. Anything **not** seen in traces is unchanged by overlay—dynamic analysis does not “prove live” except through resolved JSONL `fn` → graph `qualified_name` matches. Coverage overlay does not prove reachability; it only marks `is_covered` based on `coverage.json` line execution data. Full contract: `docs/ACCURACY_CONTRACT.md`.
 
 Runtime overlay diagnostics now expose:
 - total call records seen from trace files,

@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h4 class="mb-0">Edit Your Profile</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-6 mb-3 mb-md-0">
+                                <div class="form-group">
+                                    {{ form.first_name.label(class="form-label") }}
+                                    {% if form.first_name.errors %}
+                                        {{ form.first_name(class="form-control is-invalid") }}
+                                        <div class="invalid-feedback">
+                                            {% for error in form.first_name.errors %}
+                                                <span>{{ error }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        {{ form.first_name(class="form-control") }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.last_name.label(class="form-label") }}
+                                    {% if form.last_name.errors %}
+                                        {{ form.last_name(class="form-control is-invalid") }}
+                                        <div class="invalid-feedback">
+                                            {% for error in form.last_name.errors %}
+                                                <span>{{ error }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        {{ form.last_name(class="form-control") }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.location.label(class="form-label") }}
+                            {% if form.location.errors %}
+                                {{ form.location(class="form-control is-invalid") }}
+                                <div class="invalid-feedback">
+                                    {% for error in form.location.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                {{ form.location(class="form-control") }}
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.fitness_goals.label(class="form-label") }}
+                            {% if form.fitness_goals.errors %}
+                                {{ form.fitness_goals(class="form-control is-invalid") }}
+                                <div class="invalid-feedback">
+                                    {% for error in form.fitness_goals.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                {{ form.fitness_goals(class="form-control") }}
+                            {% endif %}
+                            <small class="form-text text-muted">Examples: Muscle gain, Weight loss, Endurance, etc.</small>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.fitness_level.label(class="form-label") }}
+                            {{ form.fitness_level(class="form-select") }}
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.bio.label(class="form-label") }}
+                            {% if form.bio.errors %}
+                                {{ form.bio(class="form-control is-invalid", rows=5) }}
+                                <div class="invalid-feedback">
+                                    {% for error in form.bio.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                {{ form.bio(class="form-control", rows=5) }}
+                            {% endif %}
+                            <small class="form-text text-muted">Tell us a bit about yourself and your fitness journey</small>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('main.profile') }}" class="btn btn-outline-secondary">Cancel</a>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

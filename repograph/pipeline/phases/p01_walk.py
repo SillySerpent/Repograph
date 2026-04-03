@@ -1,7 +1,7 @@
 """Phase 1 — Walk: discover all source files in the repository."""
 from __future__ import annotations
 
-from repograph.config import load_extra_exclude_dirs
+from repograph.settings import load_extra_exclude_dirs
 from repograph.core.models import FileRecord
 from repograph.utils.fs import walk_repo
 

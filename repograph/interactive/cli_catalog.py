@@ -1,6 +1,6 @@
 """Curated CLI reference for the interactive CLI browser (richer than ``repograph --help`` alone).
 
-Each entry mirrors a Typer command in :mod:`repograph.cli`. For the authoritative
+Each entry mirrors a Typer command in :mod:`repograph.surfaces.cli`. For the authoritative
 full flag list, users can still run ``repograph <cmd> --help`` from this browser.
 """
 from __future__ import annotations
@@ -94,20 +94,19 @@ def all_categories() -> tuple[CliCategory, ...]:
                     flags=(
                         FlagLine(
                             "--full",
-                            "Complete rebuild plus automatic traced-test overlay when RepoGraph can resolve a test command.",
+                            "Complete rebuild. Automatic traced-test overlay only runs when the auto_dynamic_analysis setting is enabled.",
                         ),
                         FlagLine(
                             "--static-only",
                             "Complete rebuild of the index with no automatic test execution or runtime overlay.",
                         ),
                         FlagLine(
-                            "--embeddings",
-                            "Runs the optional semantic-embedding step (requires sentence-transformers). "
-                            "Skip unless you use hybrid semantic search.",
+                            "--embeddings / --no-embeddings",
+                            "Override the persisted embeddings setting for this sync only.",
                         ),
                         FlagLine(
-                            "--no-git",
-                            "Skips git-based phases (faster when you do not need blame/branch hints from git).",
+                            "--git / --no-git",
+                            "Override the persisted git-coupling setting for this sync only.",
                         ),
                         FlagLine(
                             "--strict",
@@ -739,14 +738,14 @@ def all_categories() -> tuple[CliCategory, ...]:
         ),
         CliCategory(
             id="trace",
-            title="Trace & dynamic overlay",
-            intro="Advanced/manual runtime JSONL tooling under .repograph/runtime/. Routine dynamic overlay happens on `repograph sync --full`.",
+            title="Advanced runtime diagnostics",
+            intro="Manual JSONL tracing tools under .repograph/runtime/. Start with `repograph sync --full`; use this category when you need explicit instrumentation control or raw trace inspection.",
             commands=(
                 CliEntry(
                     key="trace_install",
                     argv=("trace", "install"),
                     title="trace install",
-                    body="Writes conftest.py or sitecustomize.py so pytest/python emits call traces to JSONL. Use this only when you want manual tracing control.",
+                    body="Writes conftest.py or sitecustomize.py so pytest/python emits call traces to JSONL. Use this only when `sync --full` is not enough and you want manual tracing control.",
                     flags=(
                         FlagLine(
                             "--mode / -m",
@@ -773,7 +772,7 @@ def all_categories() -> tuple[CliCategory, ...]:
                     key="trace_collect",
                     argv=("trace", "collect"),
                     title="trace collect",
-                    body="Lists trace JSONL files already on disk and how large they are—sanity check before report.",
+                    body="Lists trace JSONL files already on disk and how large they are. Read-only sanity check for a manual tracing session.",
                     examples=("repograph trace collect",),
                     run_default_help=(
                         "Read-only listing; does not delete or merge traces."
@@ -783,7 +782,7 @@ def all_categories() -> tuple[CliCategory, ...]:
                     key="trace_report",
                     argv=("trace", "report"),
                     title="trace report",
-                    body="Combines runtime JSONL traces with the static graph: hot functions, dead-in-static but live "
+                    body="Combines manual runtime JSONL traces with the static graph: hot functions, dead-in-static but live "
                     "at runtime, and new dynamic edges.",
                     flags=(
                         FlagLine(

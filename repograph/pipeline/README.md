@@ -1,9 +1,23 @@
 # Pipeline (`repograph.pipeline`)
 
+## Runner layout
+
+[`repograph/pipeline/runner.py`](runner.py) is the stable public facade used by
+CLI, services, and tests. The actual implementation is split under
+[`repograph/pipeline/runner_parts/`](runner_parts/) by responsibility:
+
+- `config.py` — `RunConfig` and validation
+- `shared.py` — observability scopes, warning policy, and cleanup helpers
+- `build.py` — static phase execution and optional SPI phases
+- `hooks.py` — post-build hook execution and summary merging
+- `full.py` — full static rebuild coordination
+- `incremental.py` — incremental coordination
+- `full_runtime.py` — full rebuild plus runtime-plan execution
+
 ## Layer A — Graph construction
 
-`runner.run_full_pipeline` and `runner.run_incremental_pipeline` call phase modules
-under `repograph/pipeline/phases/` in a fixed order:
+`runner.run_full_pipeline` and `runner.run_incremental_pipeline` coordinate
+phase modules under `repograph/pipeline/phases/` in a fixed order:
 
 - **Full sync:** `p01` walk → `p02` structure → `p03` parse → `p04` imports →
   `p05` calls → `p05b` callbacks → `p06` heritage → `p07` variables → `p08` types
@@ -23,8 +37,8 @@ The live pipeline persists through a single [`GraphStore`](../graph_store/store.
 
 ## Layer B — Plugin hooks
 
-After Layer A completes, `_fire_hooks` runs (unless incremental sync exits early
-with no file changes):
+After Layer A completes, `runner_parts/hooks.py` runs the hook sequence (unless
+incremental sync exits early with no file changes):
 
 1. `on_graph_built`
 2. `on_evidence`

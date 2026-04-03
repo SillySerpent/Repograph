@@ -5,7 +5,7 @@ import re
 
 from typer.testing import CliRunner
 
-from repograph.cli import app
+from repograph.surfaces.cli import app
 
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 

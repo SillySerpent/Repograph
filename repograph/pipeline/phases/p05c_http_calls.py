@@ -57,7 +57,7 @@ _HTTP_CLIENT_PATTERNS: list[tuple[str, str]] = [
     ("urllib.request.urlopen", "GET"),
 ]
 
-# Regex to extract the first string-literal argument from a call site text.
+# Regex to extract the first string-literal argument from legacy call-site text.
 # Handles single/double/triple quoted strings.
 _FIRST_STRING_ARG_RE = re.compile(
     r"""(?:^[^(]*\()\s*(?:f?['"]{3}(.*?)['"]{3}|f?['"]([^'"]+)['"])""",
@@ -129,8 +129,9 @@ def _build_call_index(
 ) -> dict[tuple[str, str], list[tuple[str, int]]]:
     """Build (http_method, raw_url) → [(caller_fn_id, line)] from parsed call sites.
 
-    Scans CallSite objects for HTTP client patterns; extracts the first string
-    literal argument as the URL pattern.  No DB queries.
+    Scans CallSite objects for HTTP client patterns; uses ``argument_exprs`` and
+    ``keyword_args`` as the primary source of URL literals, with a legacy
+    ``callee_text`` fallback for older synthetic test shapes. No DB queries.
     """
     index: dict[tuple[str, str], list[tuple[str, int]]] = defaultdict(list)
     for pf in parsed_files:
@@ -143,8 +144,7 @@ def _build_call_index(
                     break
             if not http_method:
                 continue
-            # Try to extract the first string literal from the call site text.
-            url = _extract_first_string_from_callee(cs.callee_text or "")
+            url = _extract_url_from_call_site(cs)
             if not url:
                 continue
             # caller_function_id is the resolved function id from the parser.
@@ -154,12 +154,50 @@ def _build_call_index(
     return dict(index)
 
 
+def _extract_url_from_call_site(call_site) -> str:
+    """Extract a URL literal from a parsed HTTP client call.
+
+    Real parsers store the callee expression separately from positional and
+    keyword arguments. Prefer those argument fields and only fall back to
+    ``callee_text`` for older synthetic fixtures.
+    """
+    for expr in call_site.argument_exprs or []:
+        literal = _extract_string_literal(expr)
+        if literal:
+            return literal
+
+    for key in ("url", "path", "endpoint", "uri"):
+        literal = _extract_string_literal((call_site.keyword_args or {}).get(key, ""))
+        if literal:
+            return literal
+
+    return _extract_first_string_from_callee(call_site.callee_text or "")
+
+
+def _extract_string_literal(expr: str) -> str:
+    expr = (expr or "").strip()
+    if not expr:
+        return ""
+
+    prefixes = ("rf", "fr", "rb", "br", "ur", "ru", "r", "f", "u", "b")
+    lowered = expr.lower()
+    for prefix in prefixes:
+        if lowered.startswith(prefix) and len(expr) > len(prefix):
+            expr = expr[len(prefix):]
+            break
+
+    for quote in ('"""', "'''", '"', "'"):
+        if expr.startswith(quote) and expr.endswith(quote) and len(expr) >= len(quote) * 2:
+            return expr[len(quote):-len(quote)]
+    return ""
+
+
 def _extract_first_string_from_callee(callee_text: str) -> str:
     """Extract the first string literal argument embedded in a callee_text.
 
-    The callee_text from parsed call sites is typically just the callee expression
-    (e.g., ``requests.get``), not the full call.  If no string is found here, the
-    caller should look at the raw source line instead.
+    This supports older synthetic call-site fixtures where the full call text was
+    embedded in ``callee_text``. Real parser output usually leaves ``callee_text``
+    as just the callee expression (for example ``requests.get``).
     """
     m = _FIRST_STRING_ARG_RE.search(callee_text)
     if m:

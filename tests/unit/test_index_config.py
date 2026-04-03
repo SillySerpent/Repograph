@@ -5,7 +5,7 @@ import textwrap
 
 import yaml
 
-from repograph.config import (
+from repograph.settings import (
     INDEX_CONFIG_FILENAME,
     load_extra_exclude_dirs,
     load_sync_test_command,

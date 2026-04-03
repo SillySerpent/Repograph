@@ -4,7 +4,8 @@ from typer.testing import CliRunner
 
 import json
 
-from repograph.cli import app, _test_profile_args, _test_profiles_catalog
+from repograph.surfaces.cli import app
+from repograph.surfaces.cli.commands.sync import _test_profile_args, _test_profiles_catalog
 
 
 def test_test_profile_args_matrix() -> None:
@@ -41,7 +42,7 @@ def test_test_command_invokes_pytest(monkeypatch, tmp_path) -> None:
         called["cwd"] = cwd
         return _R()
 
-    monkeypatch.setattr("repograph.cli.subprocess.run", _fake_run)
+    monkeypatch.setattr("repograph.surfaces.cli.commands.sync.subprocess.run", _fake_run)
     runner = CliRunner()
     result = runner.invoke(app, ["test", "--profile", "unit-fast", str(tmp_path), "--", "-k", "runtime"])
     assert result.exit_code == 0, result.stdout + str(result.stderr)
@@ -71,7 +72,7 @@ def test_test_command_json_run_metadata(monkeypatch, tmp_path) -> None:
         called["cwd"] = cwd
         return _R()
 
-    monkeypatch.setattr("repograph.cli.subprocess.run", _fake_run)
+    monkeypatch.setattr("repograph.surfaces.cli.commands.sync.subprocess.run", _fake_run)
     runner = CliRunner()
     result = runner.invoke(app, ["test", "--json", "--profile", "integration", str(tmp_path)])
     assert result.exit_code == 0, result.stdout + str(result.stderr)

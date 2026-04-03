@@ -54,6 +54,21 @@ def _make_parsed_file(path: str, functions, imports=None, language: str = "pytho
     return pf
 
 
+def _run_framework_parse(repo_root: Path):
+    from repograph.graph_store.store import GraphStore
+    from repograph.parsing.symbol_table import SymbolTable
+    from repograph.pipeline.phases import p01_walk, p03_parse, p03b_framework_tags
+
+    rg_dir = repo_root / ".repograph"
+    rg_dir.mkdir(exist_ok=True)
+    store = GraphStore(str(rg_dir / "graph.db"))
+    store.initialize_schema()
+    files = p01_walk.run(str(repo_root))
+    parsed = p03_parse.run(files, store, SymbolTable())
+    p03b_framework_tags.run(parsed, store)
+    return parsed, store
+
+
 # ---------------------------------------------------------------------------
 # Flask adapter standard schema
 # ---------------------------------------------------------------------------
@@ -214,3 +229,72 @@ def test_nextjs_adapter_non_route_file_returns_empty():
     )
 
     assert result == {}
+
+
+def test_nextjs_route_live_parse_populates_route_metadata(tmp_path):
+    repo = tmp_path / "repo"
+    route_dir = repo / "app" / "users"
+    route_dir.mkdir(parents=True)
+    (route_dir / "route.ts").write_text(
+        "export async function POST(request: Request) {\n"
+        "  return Response.json({ ok: true });\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    parsed, store = _run_framework_parse(repo)
+    try:
+        pf = next(p for p in parsed if p.file_record.path == "app/users/route.ts")
+        artifact = pf.plugin_artifacts["framework.nextjs"]
+        assert artifact["route_functions"][0]["http_method"] == "POST"
+        assert artifact["route_functions"][0]["route_path"] == "/users"
+
+        rows = store.query(
+            "MATCH (f:Function {qualified_name: $qn, file_path: $fp}) "
+            "RETURN f.layer, f.role, f.http_method, f.route_path",
+            {"qn": "POST", "fp": "app/users/route.ts"},
+        )
+        assert rows
+        assert rows[0][0] == "api"
+        assert rows[0][1] == "handler"
+        assert rows[0][2] == "POST"
+        assert rows[0][3] == "/users"
+    finally:
+        store.close()
+
+
+def test_react_and_nextjs_live_parse_populates_component_hints_and_ui_layer(tmp_path):
+    repo = tmp_path / "repo"
+    page_dir = repo / "app"
+    page_dir.mkdir(parents=True)
+    (page_dir / "page.tsx").write_text(
+        '"use client";\n'
+        'import { useState } from "react";\n'
+        "export default function HomePage() {\n"
+        "  const [count, setCount] = useState(0);\n"
+        "  return <button onClick={() => setCount(count + 1)}>{count}</button>;\n"
+        "}\n"
+        "function useCounterThing() {\n"
+        "  return 1;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    parsed, store = _run_framework_parse(repo)
+    try:
+        pf = next(p for p in parsed if p.file_record.path == "app/page.tsx")
+        react_artifact = pf.plugin_artifacts["framework.react"]
+        next_artifact = pf.plugin_artifacts["framework.nextjs"]
+
+        assert "HomePage" in react_artifact["component_names"]
+        assert "useCounterThing" in react_artifact["hook_names"]
+        assert react_artifact["client_component"] is True
+        assert next_artifact["page_components"] == ["app/page.tsx"]
+
+        rows = store.query(
+            "MATCH (f:File {path: $path}) RETURN f.layer",
+            {"path": "app/page.tsx"},
+        )
+        assert rows and rows[0][0] == "ui"
+    finally:
+        store.close()

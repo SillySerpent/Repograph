@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from repograph.config import repograph_dir
+from repograph.settings import repograph_dir
 
 
 @dataclass

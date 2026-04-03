@@ -26,7 +26,7 @@ def rg(tmp_path_factory):
             full=True,
         )
     )
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
 
     r = RepoGraph(repo, repograph_dir=str(tmp / "rg"))
     yield r

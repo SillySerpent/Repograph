@@ -6,6 +6,9 @@ from repograph.runtime.trace_format import (
     make_session_record,
     iter_records,
     collect_trace_files,
+    collect_live_trace_files,
+    live_trace_dir,
+    live_session_dir,
     trace_dir,
 )
 from repograph.runtime.tracer import SysTracer, trace_call
@@ -18,6 +21,9 @@ __all__ = [
     "make_session_record",
     "iter_records",
     "collect_trace_files",
+    "collect_live_trace_files",
+    "live_trace_dir",
+    "live_session_dir",
     "trace_dir",
     "SysTracer",
     "trace_call",

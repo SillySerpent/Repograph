@@ -54,6 +54,21 @@ Do **not** expect bit-identical graphs when comparing **full** vs **incremental*
 
 ## Session tracing (optional)
 
-Default pytest runs do **not** install ``SysTracer``. To trace a test session, copy
-``conftest_repograph_trace_install.example.py`` to the repo root as ``conftest.py`` and set
-``REPGRAPH_REPO_ROOT`` / ``REPGRAPH_DIR`` if needed. Traces land under ``<repograph_dir>/runtime/*.jsonl``.
+Start with ``repograph sync --full`` for the normal runtime-overlay workflow.
+Default pytest runs do **not** install ``SysTracer`` on their own. If you
+explicitly want a manual traced pytest session, run ``repograph trace install``
+from the repo root — this writes ``.repograph/conftest.py`` which pytest
+discovers automatically. Traces land under
+``<repograph_dir>/runtime/*.jsonl``.
+
+## StrayRatz runtime workflows
+
+The heavy StrayRatz runtime workflow tests provision their own temporary copy of
+the fixture plus an isolated ``.venv`` from
+``tests/fixtures/StrayRatz/requirements.txt``. They do **not** require Flask
+and related app dependencies to already be installed in the main RepoGraph dev
+environment.
+
+Those tests also own their cleanup boundary: the copied StrayRatz repo,
+generated ``.repograph`` directory, SQLite files, launchers, and temporary
+fixture ``.venv`` all live under one temp workspace and are deleted on teardown.

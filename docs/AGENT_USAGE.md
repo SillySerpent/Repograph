@@ -28,11 +28,11 @@ repograph summary
 
 This gives you in a single call:
 - What the repo does (extracted from README)
-- Index size (files, functions, classes, call edges)
-- Top 5 entry points with scores
-- Top 5 pathways with confidence
-- Dead code and duplicate counts
-- Health status
+- Index size plus sync/runtime health and trust status
+- Top 5 operational entry points with scores
+- Top 5 pathways with confidence and source
+- Major risks plus structural hotspots
+- Dynamic-analysis status and warnings
 
 **Decision point:** if the summary alone answers your question, stop here.
 
@@ -98,6 +98,8 @@ Returns: all functions in the file with line ranges, entry-point flags, and
 dead-code flags.
 
 For a symbol: returns callers, callees, signature, and pathway membership.
+Prefer exact qualified names when possible; if a short name is ambiguous,
+RepoGraph now shows the candidate list instead of guessing.
 
 ---
 
@@ -110,6 +112,8 @@ repograph impact <symbol>
 Before modifying a function, check its blast radius.  Returns direct callers,
 transitive callers up to depth 3, and affected files.  Use this to know which
 tests to run and which other modules may need updating.
+If the symbol name is ambiguous, `impact` returns the candidates and asks you
+to retry with the exact qualified name.
 
 ---
 

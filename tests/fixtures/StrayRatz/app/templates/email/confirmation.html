@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirm Your Email</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .header {
+            text-align: center;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+            font-size: 12px;
+            color: #777;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 20px 0;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Confirm Your Email Address</h1>
+        </div>
+        
+        <p>Hello {{ user.username }},</p>
+        
+        <p>Thank you for registering with HydraFuel. To complete your registration and verify your email address, please click the button below:</p>
+        
+        <div style="text-align: center;">
+            <a href="{{ confirm_url }}" class="btn">Confirm Email</a>
+        </div>
+        
+        <p>If the button above doesn't work, please copy and paste the following link into your browser:</p>
+        <p style="word-break: break-all;"><a href="{{ confirm_url }}">{{ confirm_url }}</a></p>
+        
+        <p>This link will expire in 24 hours.</p>
+        
+        <p>If you did not create an account with us, please disregard this email.</p>
+        
+        <p>Best regards,<br>The HydraFuel Team</p>
+        
+        <div class="footer">
+            <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+    </div>
+</body>
+</html> 

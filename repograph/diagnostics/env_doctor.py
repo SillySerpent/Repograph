@@ -58,7 +58,7 @@ def _isolated_import_probe() -> CheckResult:
 
         with tempfile.TemporaryDirectory() as td:
             r = subprocess.run(
-                [sys.executable, "-c", "import repograph.cli as c; print('import_ok')"],
+                [sys.executable, "-c", "import repograph.surfaces.cli as c; print('import_ok')"],
                 cwd=td,
                 capture_output=True,
                 text=True,
@@ -66,20 +66,20 @@ def _isolated_import_probe() -> CheckResult:
             )
             if r.returncode == 0:
                 return CheckResult(
-                    "isolated_import", True, "repograph.cli imports from isolated cwd"
+                    "isolated_import", True, "repograph.surfaces.cli imports from isolated cwd"
                 )
             detail = (r.stderr or r.stdout or "").strip()
             return CheckResult(
                 "isolated_import",
                 False,
-                f"repograph.cli import from isolated cwd failed: {detail}",
+                f"repograph.surfaces.cli import from isolated cwd failed: {detail}",
             )
     except Exception as exc:  # pragma: no cover - defensive path
         return CheckResult("isolated_import", False, f"isolated import probe skipped: {exc}")
 
 
 def _writable_index_dir(root: str) -> CheckResult:
-    from repograph.config import repograph_dir
+    from repograph.settings import repograph_dir
 
     rg_dir = Path(repograph_dir(root))
     try:
@@ -137,7 +137,7 @@ def collect_doctor_results(repo_path: str | None = None, verbose: bool = False) 
     results.append(CheckResult("repo_root", True, f"repo root: {root}"))
     results.append(_writable_index_dir(root))
 
-    from repograph.config import db_path, is_initialized, repograph_dir
+    from repograph.settings import db_path, is_initialized, repograph_dir
 
     rg = repograph_dir(root)
     if is_initialized(root):

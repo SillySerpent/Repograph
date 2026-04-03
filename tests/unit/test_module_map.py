@@ -27,7 +27,7 @@ def flask_modules(tmp_path_factory):
             full=True,
         )
     )
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
 
     with RepoGraph(repo, repograph_dir=rg_dir) as rg:
         mods = rg.modules()

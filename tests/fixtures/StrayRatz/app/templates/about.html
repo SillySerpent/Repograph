@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="about-header text-center py-5">
+    <div class="container">
+        <h1 class="display-3 fw-bold mb-4">About Hydra Fuel</h1>
+        <p class="lead fs-4 mb-5 tagline">"The new status symbol? Your physique."</p>
+    </div>
+</div>
+
+<div class="container about-container">
+    <div class="row mb-5">
+        <div class="col-lg-6">
+            <div class="about-section-image bg-dark rounded-3 p-5 d-flex align-items-center justify-content-center h-100">
+                <div class="text-center">
+                    <i class="fas fa-dumbbell fa-5x text-primary mb-4"></i>
+                    <h2 class="text-white">OUR STORY</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="about-section-content">
+                <h2 class="section-title">Our Beginning</h2>
+                <p class="about-text">Hydra Fuel was born out of frustration. Like you, we were tired of purchasing multiple supplement products, taking up valuable cabinet space, and spending thousands each year on pre-workout, protein, BCAAs, and creatine—often from different brands with inconsistent quality.</p>
+                <p class="about-text">Our founder, an exercise physiologist with over a decade of experience in sports nutrition, saw a gap in the market: a single, high-quality product that combines the essential supplements fitness enthusiasts need, all in precise, scientifically-backed dosages.</p>
+                <p class="about-text">After two years of formulation, testing, and refinement, Hydra Fuel emerged as the ultimate all-in-one supplement solution designed for the modern fitness enthusiast.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="brand-philosophy text-center py-5 my-5">
+        <h2 class="display-5 fw-bold mb-4">Our Philosophy</h2>
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <p class="lead fs-4">We believe your physique is the ultimate symbol of your discipline, commitment, and self-mastery—a walking testament to your highest values.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-5">
+        <div class="col-lg-6 order-lg-2">
+            <div class="about-section-image bg-dark rounded-3 p-5 d-flex align-items-center justify-content-center h-100">
+                <div class="text-center">
+                    <i class="fas fa-flask fa-5x text-primary mb-4"></i>
+                    <h2 class="text-white">OUR FORMULA</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 order-lg-1">
+            <div class="about-section-content">
+                <h2 class="section-title">Premium Formulation</h2>
+                <p class="about-text">Unlike other supplement companies that prioritize flashy marketing over substance, HydraFuel focuses on what matters most: results-driven formulations backed by science.</p>
+                <p class="about-text">Each serving contains:</p>
+                <ul class="about-features">
+                    <li><strong>Optimal Pre-Workout Complex</strong>: Precisely dosed caffeine, L-citrulline, beta-alanine, and cognitive enhancers for maximum energy, focus, and pump.</li>
+                    <li><strong>Premium Protein Blend</strong>: 25g of highly bioavailable whey protein isolate with all essential amino acids for rapid muscle recovery and growth.</li>
+                    <li><strong>Complete BCAA Profile</strong>: The perfect 2:1:1 ratio of leucine, isoleucine, and valine to prevent muscle breakdown and accelerate recovery.</li>
+                    <li><strong>Pure Creatine Monohydrate</strong>: The gold standard in creatine supplementation, dosed at 5g per serving for increased power, strength, and muscle volume.</li>
+                </ul>
+                <p class="about-text">All ingredients are pharmaceutical grade, rigorously tested for purity, and formulated to work synergistically for maximum effectiveness.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-5">
+        <div class="col-lg-6">
+            <div class="about-section-image bg-dark rounded-3 p-5 d-flex align-items-center justify-content-center h-100">
+                <div class="text-center">
+                    <i class="fas fa-leaf fa-5x text-primary mb-4"></i>
+                    <h2 class="text-white">OUR VALUES</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="about-section-content">
+                <h2 class="section-title">What Drives Us</h2>
+                <p class="about-text">At HydraFuel, we're guided by a set of core principles:</p>
+                <div class="values-list">
+                    <div class="value-item">
+                        <h3><i class="fas fa-check-circle text-primary me-2"></i> Scientific Integrity</h3>
+                        <p>Every ingredient is dosed according to peer-reviewed research for maximum efficacy. No proprietary blends, no underdosing, no fillers.</p>
+                    </div>
+                    <div class="value-item">
+                        <h3><i class="fas fa-check-circle text-primary me-2"></i> Transparency</h3>
+                        <p>We fully disclose every ingredient and its exact dosage, so you know precisely what you're putting into your body.</p>
+                    </div>
+                    <div class="value-item">
+                        <h3><i class="fas fa-check-circle text-primary me-2"></i> Quality</h3>
+                        <p>We source only the highest-grade ingredients and manufacture in cGMP-certified facilities with rigorous quality control protocols.</p>
+                    </div>
+                    <div class="value-item">
+                        <h3><i class="fas fa-check-circle text-primary me-2"></i> Innovation</h3>
+                        <p>We continuously refine our formula based on emerging research and customer feedback to provide the most effective supplement possible.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="brand-cta text-center py-5 my-5">
+        <h2 class="display-5 fw-bold mb-4">Join the Revolution</h2>
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <p class="lead fs-4 mb-5">HydraFuel isn't just another supplement—it's a movement toward efficiency, quality, and results.</p>
+                <div class="d-grid gap-3 d-sm-flex justify-content-sm-center">
+                    <a href="{{ url_for('main.survey') }}" class="btn btn-primary btn-lg px-4 gap-3">Take Our Survey</a>
+                    <a href="#" class="btn btn-outline-dark btn-lg px-4">Pre-Order Now</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block additional_head %}
+<style>
+    .about-header {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        color: white;
+        margin-bottom: 3rem;
+        position: relative;
+    }
+    
+    .about-header::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="none"/><path d="M0 50 L100 50 M50 0 L50 100" stroke="rgba(255,255,255,0.1)" stroke-width="2"/></svg>');
+        background-size: 30px 30px;
+    }
+    
+    .tagline {
+        font-style: italic;
+        font-weight: 300;
+    }
+    
+    .about-container {
+        margin-bottom: 5rem;
+    }
+    
+    .about-section-content {
+        padding: 2rem;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .section-title {
+        font-weight: 700;
+        margin-bottom: 1.5rem;
+        position: relative;
+        padding-bottom: 0.5rem;
+    }
+    
+    .section-title::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 50px;
+        height: 3px;
+        background-color: var(--primary-color);
+    }
+    
+    .about-text {
+        font-size: 1.1rem;
+        line-height: 1.8;
+        margin-bottom: 1.5rem;
+    }
+    
+    .about-features {
+        list-style: none;
+        padding-left: 0;
+        margin-bottom: 1.5rem;
+    }
+    
+    .about-features li {
+        margin-bottom: 1rem;
+        position: relative;
+        padding-left: 2rem;
+        line-height: 1.6;
+    }
+    
+    .about-features li::before {
+        content: "✓";
+        position: absolute;
+        left: 0;
+        color: var(--primary-color);
+        font-weight: bold;
+    }
+    
+    .brand-philosophy {
+        background-color: #f8f9fa;
+        border-radius: 1rem;
+        padding: 3rem !important;
+    }
+    
+    .values-list .value-item {
+        margin-bottom: 1.5rem;
+    }
+    
+    .values-list .value-item h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    
+    .brand-cta {
+        background-color: #f8f9fa;
+        border-radius: 1rem;
+        padding: 3rem !important;
+    }
+    
+    @media (max-width: 992px) {
+        .about-section-image {
+            margin-bottom: 2rem;
+            min-height: 300px;
+        }
+        
+        .order-lg-2 {
+            margin-bottom: 2rem;
+        }
+    }
+</style>
+{% endblock %} 

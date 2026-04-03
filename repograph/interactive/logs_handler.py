@@ -3,7 +3,7 @@
 All commands read static JSONL files from ``.repograph/logs/`` and require
 no running process.  Output is Rich-formatted for readability.
 
-Registered as the ``logs`` sub-command group in ``repograph.cli``.
+Registered as the ``logs`` sub-command group in ``repograph.surfaces.cli``.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ logs_app = typer.Typer(
 
 
 def _log_dir(repo_path: str | None) -> Path:
-    from repograph.config import get_repo_root, repograph_dir
+    from repograph.settings import get_repo_root, repograph_dir
     from repograph.exceptions import RepographNotFoundError
     try:
         root = get_repo_root(repo_path)

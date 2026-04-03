@@ -260,7 +260,7 @@ def _action_mcp(rg) -> None:
 
 def _action_clean(rg) -> None:
     _section("Clean index  —  delete .repograph/")
-    from repograph.config import repograph_dir
+    from repograph.settings import repograph_dir
 
     rdir = repograph_dir(rg.repo_path)
     if not os.path.isdir(rdir):
@@ -285,7 +285,7 @@ def _action_clean_dev(rg) -> None:
     """Remove caches, venv dirs, macOS junk, trace bootstrap files, then the index."""
     from pathlib import Path
 
-    from repograph.config import repograph_dir
+    from repograph.settings import repograph_dir
     from repograph.utils.dev_clean import clean_development_artifacts, summarize_removed
 
     _section("Clean dev junk  —  caches, venv, macOS, trace helpers")

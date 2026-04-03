@@ -81,7 +81,7 @@ def _action_status(rg) -> None:
     if "last_sync" in s:
         print(f"  Last sync: {s['last_sync']}")
     try:
-        from repograph.config import repograph_dir
+        from repograph.settings import repograph_dir
         from repograph.docs.staleness import StalenessTracker
 
         st = StalenessTracker(repograph_dir(rg.repo_path))
@@ -489,7 +489,7 @@ def _action_full_report(rg) -> None:
 
     # ── Sync state / staleness ───────────────────────────────────────────────
     try:
-        from repograph.config import repograph_dir
+        from repograph.settings import repograph_dir
         from repograph.docs.staleness import StalenessTracker
         from repograph.pipeline.sync_state import lock_status
 

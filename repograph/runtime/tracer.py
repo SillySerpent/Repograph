@@ -36,12 +36,20 @@ import os
 import sys
 import time
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from types import FrameType, TracebackType
+from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
+from repograph.runtime.live_session import (
+    ActiveTraceSession,
+    clear_live_trace_session,
+    register_live_trace_session,
+)
 from repograph.runtime.trace_format import (
     make_session_record,
     trace_dir,
+    live_trace_dir,
 )
 from repograph.runtime.trace_filters import TraceFilter
 from repograph.runtime.trace_policy import TracePolicy
@@ -49,6 +57,21 @@ from repograph.runtime.trace_writer import TraceWriter
 from repograph.observability import get_logger
 
 _logger = get_logger(__name__, subsystem="runtime")
+
+if TYPE_CHECKING:
+    from _typeshed import TraceFunction
+else:
+    TraceFunction: TypeAlias = Callable[[FrameType, str, object], object]
+
+
+def _set_thread_trace(callback: TraceFunction | None) -> None:
+    """Set the threading module trace hook.
+
+    ``threading.settrace(None)`` is the correct runtime behavior for clearing
+    the hook, but some Pylance stub sets still type the parameter as
+    non-optional. Keep the compatibility cast isolated at the stdlib boundary.
+    """
+    threading.settrace(cast(Any, callback))
 
 
 class SysTracer:
@@ -76,28 +99,45 @@ class SysTracer:
         include_stdlib: bool = False,
         session_name: str = "trace",
         trace_policy: TracePolicy | None = None,
+        *,
+        trace_subdir: str = "",
+        publish_live_session: bool = False,
     ) -> None:
         self.repo_root = str(Path(repo_root).resolve())
         self.repograph_dir = str(Path(repograph_dir).resolve())
         self.include_stdlib = include_stdlib
         self.session_name = session_name
         self.trace_policy = trace_policy or TracePolicy()
+        self.trace_subdir = trace_subdir.strip().strip("/\\")
+        self.publish_live_session = publish_live_session
         self._writer: TraceWriter | None = None
         self._filter = TraceFilter(self.trace_policy)
         self._path: Path | None = None
         self._lock = threading.Lock()
-        self._prev_trace = None
+        self._prev_sys_trace: TraceFunction | None = None
+        self._prev_thread_trace: TraceFunction | None = None
 
     def __enter__(self) -> "SysTracer":
         self.start()
         return self
 
-    def __exit__(self, *_) -> None:
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _tb: TracebackType | None,
+    ) -> None:
         self.stop()
 
     def start(self) -> None:
         """Begin tracing."""
-        out_dir = trace_dir(self.repograph_dir)
+        out_dir = (
+            live_trace_dir(self.repograph_dir)
+            if self.trace_subdir == "live"
+            else trace_dir(self.repograph_dir) / self.trace_subdir
+            if self.trace_subdir
+            else trace_dir(self.repograph_dir)
+        )
         self._writer = TraceWriter(
             out_dir,
             self.session_name,
@@ -112,15 +152,30 @@ class SysTracer:
             **make_session_record(self.repo_root),
             "policy": self.trace_policy.as_dict(),
         })
+        if self.publish_live_session and self._path is not None:
+            register_live_trace_session(
+                self.repograph_dir,
+                ActiveTraceSession(
+                    pid=os.getpid(),
+                    repo_root=self.repo_root,
+                    trace_path=str(self._path),
+                    started_at=time.time(),
+                    session_name=self.session_name,
+                    python_version=sys.version.split()[0],
+                ),
+            )
 
-        self._prev_trace = sys.gettrace()
+        self._prev_sys_trace = cast(TraceFunction | None, sys.gettrace())
+        self._prev_thread_trace = cast(TraceFunction | None, threading.gettrace())
         sys.settrace(self._trace_fn)
-        threading.settrace(self._trace_fn)
+        _set_thread_trace(self._trace_fn)
 
     def stop(self) -> None:
         """Stop tracing and flush the output file."""
-        sys.settrace(self._prev_trace)
-        threading.settrace(self._prev_trace)
+        sys.settrace(self._prev_sys_trace)
+        _set_thread_trace(self._prev_thread_trace)
+        if self.publish_live_session:
+            clear_live_trace_session(self.repograph_dir, os.getpid())
         if self._writer:
             with self._lock:
                 self._write({
@@ -143,7 +198,13 @@ class SysTracer:
     # sys.settrace callback
     # ------------------------------------------------------------------
 
-    def _trace_fn(self, frame, event, arg):
+    def _trace_fn(
+        self,
+        frame: FrameType,
+        event: str,
+        arg: object,
+    ) -> TraceFunction | None:
+        del arg
         if event != "call":
             # Returning None here tells CPython not to install a local trace
             # function on this frame.  The global trace (sys.settrace) is still
@@ -207,7 +268,7 @@ class SysTracer:
         self._write(record)
         return None
 
-    def _write(self, record: dict) -> None:
+    def _write(self, record: dict[str, Any]) -> None:
         if not self._writer:
             return
         self._writer.write(record)
@@ -218,13 +279,15 @@ class SysTracer:
 # ---------------------------------------------------------------------------
 
 def trace_call(
-    fn,
-    *args,
+    fn: Callable[..., Any],
+    *args: Any,
     repo_root: str,
     repograph_dir: str,
     session_name: str = "trace",
     trace_policy: TracePolicy | None = None,
-    **kwargs,
+    trace_subdir: str = "",
+    publish_live_session: bool = False,
+    **kwargs: Any,
 ) -> tuple[Any, Path | None]:
     """Run *fn(*args, **kwargs)* under trace. Return (result, trace_path).
 
@@ -241,6 +304,8 @@ def trace_call(
         repograph_dir=repograph_dir,
         session_name=session_name,
         trace_policy=trace_policy,
+        trace_subdir=trace_subdir,
+        publish_live_session=publish_live_session,
     )
     with tracer:
         result = fn(*args, **kwargs)

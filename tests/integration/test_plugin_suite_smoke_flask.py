@@ -44,7 +44,7 @@ def plugin_smoke_flask_repo(tmp_path_factory):
 
 def test_demand_and_exporters_on_flask_graph(plugin_smoke_flask_repo) -> None:
     repo, rg_dir, _store = plugin_smoke_flask_repo
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
 
     with RepoGraph(repo, repograph_dir=rg_dir) as rg:
         for name in DEMAND_ANALYZER_ORDER:

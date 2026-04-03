@@ -77,11 +77,23 @@ from typing import Any
 TRACE_FORMAT = "jsonl_call_trace"
 TRACE_FILE_SUFFIX = ".jsonl"
 TRACE_SUBDIR = "runtime"
+LIVE_TRACE_SUBDIR = "live"
+LIVE_SESSION_SUBDIR = "live_sessions"
 
 
 def trace_dir(repograph_dir: str | Path) -> Path:
     """Return the canonical trace directory path."""
     return Path(repograph_dir) / TRACE_SUBDIR
+
+
+def live_trace_dir(repograph_dir: str | Path) -> Path:
+    """Return the directory used by long-lived live-session traces."""
+    return trace_dir(repograph_dir) / LIVE_TRACE_SUBDIR
+
+
+def live_session_dir(repograph_dir: str | Path) -> Path:
+    """Return the directory that stores active live-session markers."""
+    return trace_dir(repograph_dir) / LIVE_SESSION_SUBDIR
 
 
 def make_call_record(
@@ -137,6 +149,14 @@ def iter_records(trace_file: Path):
 def collect_trace_files(repograph_dir: str | Path) -> list[Path]:
     """Return all .jsonl files in the trace directory."""
     d = trace_dir(repograph_dir)
+    if not d.exists():
+        return []
+    return sorted(d.glob(f"*{TRACE_FILE_SUFFIX}"))
+
+
+def collect_live_trace_files(repograph_dir: str | Path) -> list[Path]:
+    """Return all long-lived live-session traces under ``runtime/live``."""
+    d = live_trace_dir(repograph_dir)
     if not d.exists():
         return []
     return sorted(d.glob(f"*{TRACE_FILE_SUFFIX}"))

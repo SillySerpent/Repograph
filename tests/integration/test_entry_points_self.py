@@ -7,6 +7,25 @@ import shutil
 import pytest
 
 REPOGRAPH_SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_SELF_ANALYSIS_COPY_EXCLUDES = (
+    ".repograph",
+    "__pycache__",
+    "*.egg-info",
+    "MagicMock",
+    ".git",
+    ".venv",
+    "venv",
+    "env",
+    ".env",
+    ".pytest_cache",
+    ".codex",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".ruff_cache",
+    "node_modules",
+    ".tox",
+)
 
 
 @pytest.fixture(scope="module")
@@ -16,7 +35,9 @@ def self_rg(tmp_path_factory):
     shutil.copytree(
         REPOGRAPH_SRC,
         repo,
-        ignore=shutil.ignore_patterns(".repograph", "__pycache__", "*.egg-info", "MagicMock"),
+        # Keep the self-analysis fixture semantically equivalent while avoiding
+        # copying heavyweight directories the repository walker already excludes.
+        ignore=shutil.ignore_patterns(*_SELF_ANALYSIS_COPY_EXCLUDES),
         ignore_dangling_symlinks=True,
     )
     rg_dir = os.path.join(repo, ".repograph")
@@ -30,7 +51,7 @@ def self_rg(tmp_path_factory):
             full=True,
         )
     )
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
 
     rg = RepoGraph(repo, repograph_dir=rg_dir)
     yield rg

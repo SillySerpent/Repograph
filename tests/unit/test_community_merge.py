@@ -174,7 +174,7 @@ class TestCommunityMergeInPipeline:
         shutil.copytree(FLASK_FIXTURE, repo)
         _run_pipeline(repo, rg_dir, min_community_size=3)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             comms = rg.communities()
 

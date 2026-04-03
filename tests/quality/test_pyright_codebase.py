@@ -1,7 +1,8 @@
-"""Run Pyright on `repograph/` and `tests/` (excluding `tests/fixtures` via pyproject).
+"""Run pinned Pyright on ``repograph/`` and ``tests``.
 
-Requires Node.js with `npx` so the pinned Pyright CLI can run. On failure, the full
-stdout/stderr from Pyright is printed and embedded in the assertion message.
+The project-level ``[tool.pyright]`` configuration in ``pyproject.toml`` is the
+checked-in type-checking contract. This test pins the CLI version so local runs
+and CI use the same Pyright release.
 """
 from __future__ import annotations
 
@@ -14,11 +15,19 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_PYRIGHT_VERSION = "1.1.408"
 
 
 def _run_pyright() -> subprocess.CompletedProcess[str]:
-    # Prefer project-local resolution (same as CI / dev docs).
-    cmd = ["npx", "--yes", "pyright", str(_REPO_ROOT / "repograph"), str(_REPO_ROOT / "tests")]
+    cmd = [
+        "npx",
+        "--yes",
+        f"pyright@{_PYRIGHT_VERSION}",
+        "--project",
+        str(_REPO_ROOT / "pyproject.toml"),
+        str(_REPO_ROOT / "repograph"),
+        str(_REPO_ROOT / "tests"),
+    ]
     return subprocess.run(
         cmd,
         cwd=str(_REPO_ROOT),
@@ -45,5 +54,5 @@ def test_pyright_clean_on_repograph_and_tests() -> None:
     print("\n--- pyright stderr ---\n", err, file=sys.stderr, sep="")
     combined = f"{out}\n{err}".strip()
     pytest.fail(
-        f"pyright exited {proc.returncode}. Full output below.\n\n{combined}",
+        f"pyright {_PYRIGHT_VERSION} exited {proc.returncode}. Full output below.\n\n{combined}",
     )

@@ -6,7 +6,7 @@ import shutil
 
 import pytest
 
-from repograph.graph_store.store_queries_analytics import (
+from repograph.graph_store.store_queries_entrypoints import (
     ENTRY_POINT_TEST_COVERAGE_DEFINITION,
 )
 
@@ -31,7 +31,7 @@ def flask_rg(tmp_path_factory):
             full=True,
         )
     )
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
 
     with RepoGraph(repo, repograph_dir=rg_dir) as rg:
         yield rg

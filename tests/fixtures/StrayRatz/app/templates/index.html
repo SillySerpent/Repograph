@@ -1,0 +1,462 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero-section text-center text-white">
+    <div class="container" data-aos="fade-up">
+        <h1 class="display-3 fw-bold text-uppercase">Four Supplements. <span class="d-block">One Tub.</span></h1>
+        <p class="lead fs-4 mb-4 mx-auto">Stop wasting money on multiple products. HydraFuel combines pre-workout, protein, BCAAs, and creatine in one powerful formula.</p>
+        <h2 class="tagline fst-italic mb-5">"The new status symbol? Your physique."</h2>
+        <div class="hero-buttons">
+            <a href="#features" class="btn btn-light btn-lg me-md-3">Learn More</a>
+            <a href="{{ url_for('main.survey') }}" class="btn btn-outline-light btn-lg">Take Survey</a>
+        </div>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section id="features" class="py-5 features-section">
+    <div class="container">
+        <h2 class="text-center mb-5 section-title" data-aos="fade-up">Why Choose HydraFuel?</h2>
+        <div class="row gy-4">
+            <div class="col-md-3 mb-4" data-aos="fade-up" data-aos-delay="100">
+                <div class="card h-100 feature-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-dollar-sign fa-3x mb-3 text-primary"></i>
+                        <h3 class="card-title">Save Money</h3>
+                        <p class="card-text">Pay for one product instead of four. Cut your supplement costs by up to 60% while maintaining premium quality.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4" data-aos="fade-up" data-aos-delay="200">
+                <div class="card h-100 feature-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-flask fa-3x mb-3 text-primary"></i>
+                        <h3 class="card-title">Science-Backed</h3>
+                        <p class="card-text">Formulated by experts to deliver clinically effective dosages of each ingredient with no fillers or proprietary blends.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4" data-aos="fade-up" data-aos-delay="300">
+                <div class="card h-100 feature-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-fire fa-3x mb-3 text-primary"></i>
+                        <h3 class="card-title">Maximum Results</h3>
+                        <p class="card-text">Energy, focus, recovery, and muscle growth in one powerful, synergistic formula designed for peak performance.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4" data-aos="fade-up" data-aos-delay="400">
+                <div class="card h-100 feature-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-check-circle fa-3x mb-3 text-primary"></i>
+                        <h3 class="card-title">Convenience</h3>
+                        <p class="card-text">One scoop, one shake. Simplify your supplement routine, declutter your cabinet, and never run out of ingredients again.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Product Highlight Section -->
+<section class="product-section py-5">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6" data-aos="fade-right">
+                <h2 class="section-title mb-4">THE ULTIMATE FORMULA</h2>
+                <p class="lead fw-bold">HydraFuel combines the best of science and performance:</p>
+                <ul class="product-features">
+                    <li><strong>Pre-Workout Energy Blend</strong>: Precisely dosed caffeine (200mg), L-citrulline (6g), beta-alanine (3.2g), and cognitive enhancers for maximum pump, energy, and mental focus</li>
+                    <li><strong>Premium Whey Protein Isolate</strong>: 25g of ultra-filtered, rapidly absorbing protein with complete amino acid profile for optimal muscle growth and recovery</li>
+                    <li><strong>Essential BCAAs</strong>: The scientifically validated 2:1:1 ratio of leucine, isoleucine, and valine (7g total) to prevent muscle breakdown and accelerate recovery</li>
+                    <li><strong>Pure Creatine Monohydrate</strong>: The gold standard in strength supplements, dosed at the clinically effective 5g per serving for increased power, performance, and muscle volume</li>
+                </ul>
+                <div class="product-details mt-4 mb-4">
+                    <div class="detail-item">
+                        <i class="fas fa-check-circle text-success me-2"></i> Third-party tested for purity and potency
+                    </div>
+                    <div class="detail-item">
+                        <i class="fas fa-check-circle text-success me-2"></i> No artificial colors or fillers
+                    </div>
+                    <div class="detail-item">
+                        <i class="fas fa-check-circle text-success me-2"></i> Mixes easily with no clumps
+                    </div>
+                </div>
+                <a href="#" class="btn btn-primary mt-2">Learn More About Our Formula</a>
+            </div>
+            <div class="col-lg-6 text-center mt-4 mt-lg-0" data-aos="fade-left">
+                <div class="product-image-container">
+                    <div class="product-image-placeholder bg-dark p-5 rounded-3">
+                        <i class="fas fa-dumbbell fa-5x text-light mb-3"></i>
+                        <h3 class="text-light">HYDRAFUEL</h3>
+                        <p class="text-light mb-4">ALL-IN-ONE FORMULA</p>
+                        <div class="premium-badge">
+                            PREMIUM
+                        </div>
+                    </div>
+                    <div class="product-tag">
+                        <span class="product-tag-text">Save up to 60%</span>
+                    </div>
+                </div>
+                <div class="flavor-selector mt-4">
+                    <span class="flavor-label">Available Flavors:</span>
+                    <div class="flavors mt-2">
+                        <button class="flavor-btn active" title="Berry Blast">BB</button>
+                        <button class="flavor-btn" title="Vanilla Ice">VI</button>
+                        <button class="flavor-btn" title="Chocolate Thunder">CT</button>
+                        <button class="flavor-btn" title="Tropical Punch">TP</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+    .product-section {
+        background-color: #f8f9fa;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .product-image-container {
+        position: relative;
+    }
+    
+    .product-tag {
+        position: absolute;
+        top: 20px;
+        right: -10px;
+        background-color: var(--primary-color);
+        color: white;
+        padding: 8px 15px;
+        border-radius: 30px;
+        font-weight: 600;
+        transform: rotate(5deg);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        z-index: 2;
+    }
+    
+    .premium-badge {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(255,255,255,0.2);
+        color: white;
+        font-weight: 700;
+        padding: 5px 15px;
+        border-radius: 20px;
+        letter-spacing: 2px;
+    }
+    
+    .product-details {
+        margin-top: 2rem;
+    }
+    
+    .detail-item {
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+    
+    .flavor-selector {
+        text-align: center;
+    }
+    
+    .flavor-label {
+        font-weight: 600;
+        color: var(--text-color);
+    }
+    
+    .flavors {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+    }
+    
+    .flavor-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 2px solid rgba(0,0,0,0.1);
+        background-color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .flavor-btn.active {
+        border-color: var(--primary-color);
+        transform: scale(1.1);
+        box-shadow: 0 0 10px rgba(0, 102, 255, 0.3);
+    }
+</style>
+
+<!-- Testimonials Section -->
+<section class="py-5 testimonials-section">
+    <div class="container">
+        <h2 class="text-center mb-2 section-title" data-aos="fade-up">What Our Customers Say</h2>
+        <p class="text-center text-muted mb-5" data-aos="fade-up">Join thousands who've made the switch to the ultimate all-in-one supplement</p>
+        <div class="row gy-4">
+            <div class="col-md-4 mb-4" data-aos="fade-up" data-aos-delay="100">
+                <div class="testimonial-card">
+                    <div class="card-body">
+                        <div class="testimonial-stars text-warning">
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="testimonial-avatar mb-3">
+                            <div class="avatar-placeholder">MT</div>
+                            <div class="verified-badge" title="Verified Purchase">
+                                <i class="fas fa-check"></i>
+                            </div>
+                        </div>
+                        <p class="testimonial-text">"I was skeptical about an all-in-one supplement, but HydraFuel delivers. Great energy for my workout, amazing pumps, and I'm saving a ton of money each month. This will be my go-to from now on."</p>
+                        <p class="testimonial-author">- Mike T., CrossFit Athlete</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4" data-aos="fade-up" data-aos-delay="200">
+                <div class="testimonial-card">
+                    <div class="card-body">
+                        <div class="testimonial-stars text-warning">
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="testimonial-avatar mb-3">
+                            <div class="avatar-placeholder">SL</div>
+                            <div class="verified-badge" title="Verified Purchase">
+                                <i class="fas fa-check"></i>
+                            </div>
+                        </div>
+                        <p class="testimonial-text">"Finally, a supplement that doesn't break the bank! HydraFuel gives me everything I need in one scoop, tastes amazing, and mixes perfectly. The protein quality is on par with premium isolates I've tried. My new go-to!"</p>
+                        <p class="testimonial-author">- Sarah L., Weightlifter</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4" data-aos="fade-up" data-aos-delay="300">
+                <div class="testimonial-card">
+                    <div class="card-body">
+                        <div class="testimonial-stars text-warning">
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star-half-alt"></i>
+                        </div>
+                        <div class="testimonial-avatar mb-3">
+                            <div class="avatar-placeholder">JR</div>
+                            <div class="verified-badge" title="Verified Purchase">
+                                <i class="fas fa-check"></i>
+                            </div>
+                        </div>
+                        <p class="testimonial-text">"As a trainer, I've recommended countless supplements to clients. HydraFuel is the first that combines everything they need in one product with clinically effective dosages. My clients love the convenience and results. Game changer!"</p>
+                        <p class="testimonial-author">- Jason R., Personal Trainer</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+    .testimonials-section {
+        background-color: #fff;
+        position: relative;
+    }
+    
+    .testimonial-text {
+        font-size: 1rem;
+        line-height: 1.8;
+        margin-bottom: 1.5rem;
+    }
+    
+    .testimonial-avatar {
+        display: flex;
+        align-items: center;
+        position: relative;
+        width: fit-content;
+    }
+    
+    .avatar-placeholder {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background-color: var(--primary-color);
+        color: white;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .verified-badge {
+        position: absolute;
+        right: -5px;
+        bottom: -5px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background-color: var(--success-color);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.6rem;
+    }
+</style>
+
+<!-- Call to Action & Newsletter -->
+<section class="cta-section py-5">
+    <div class="container">
+        <div class="cta-wrapper" data-aos="fade-up">
+            <div class="row align-items-center">
+                <div class="col-lg-7">
+                    <div class="cta-content">
+                        <h2 class="display-5 fw-bold mb-3">READY TO TRANSFORM YOUR PHYSIQUE?</h2>
+                        <p class="lead fs-4 mb-4">Join the HydraFuel revolution and stop overpaying for supplements. <span class="d-block mt-2 tagline">"The new status symbol? Your physique."</span></p>
+                        <div class="cta-features mb-4">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="cta-feature">
+                                        <i class="fas fa-check-circle text-success me-2"></i> Save up to 60% on supplements
+                                    </div>
+                                    <div class="cta-feature">
+                                        <i class="fas fa-check-circle text-success me-2"></i> Clinically effective dosages
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="cta-feature">
+                                        <i class="fas fa-check-circle text-success me-2"></i> Premium, clean ingredients
+                                    </div>
+                                    <div class="cta-feature">
+                                        <i class="fas fa-check-circle text-success me-2"></i> Third-party tested
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="cta-buttons">
+                            <a href="#" class="btn btn-primary btn-lg me-md-3">Pre-Order Now</a>
+                            <a href="{{ url_for('main.survey') }}" class="btn btn-outline-light btn-lg">Take Our Survey</a>
+                            <div class="cta-note mt-3 text-white-50">
+                                <small><i class="fas fa-info-circle me-1"></i> Limited first-batch availability. Pre-order to secure your supply.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-5 mt-5 mt-lg-0">
+                    <div class="newsletter-box bg-white p-4 rounded-3 shadow">
+                        <h3 class="text-center mb-1">Stay Updated</h3>
+                        <p class="text-center text-muted mb-4">Subscribe to our newsletter for exclusive offers and early access.</p>
+                        <form id="newsletter-form" class="main-newsletter-form">
+                            {{ form.hidden_tag() }}
+                            <div class="mb-3">
+                                {{ form.name(class="form-control", placeholder="Your Name (Optional)") }}
+                            </div>
+                            <div class="mb-3">
+                                {{ form.email(class="form-control", placeholder="Your Email*") }}
+                            </div>
+                            {{ form.submit(class="btn btn-primary w-100 btn-lg") }}
+                        </form>
+                        <div id="newsletter-result" class="mt-3"></div>
+                        <div class="text-center mt-3">
+                            <small class="text-muted">By subscribing, you agree to our <a href="{{ url_for('main.privacy_policy') }}">Privacy Policy</a></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+    .cta-section {
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+        color: white;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .cta-section::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="none"/><path d="M0 50 L100 50 M50 0 L50 100" stroke="rgba(255,255,255,0.1)" stroke-width="2"/></svg>');
+        background-size: 30px 30px;
+        pointer-events: none;
+    }
+    
+    .cta-wrapper {
+        position: relative;
+        z-index: 1;
+    }
+    
+    .cta-content {
+        padding: 2rem 0;
+    }
+    
+    .cta-feature {
+        margin-bottom: 1rem;
+        font-weight: 500;
+        padding-left: 1.5rem;
+        position: relative;
+    }
+    
+    .cta-feature i {
+        position: absolute;
+        left: 0;
+    }
+    
+    .cta-buttons .btn {
+        margin-bottom: 1rem;
+        padding: 0.8rem 2rem;
+    }
+    
+    .cta-note {
+        font-style: italic;
+    }
+    
+    .newsletter-box {
+        border-radius: 15px !important;
+        overflow: hidden;
+    }
+</style>
+{% endblock %}
+
+{% block additional_scripts %}
+<script>
+    $(document).ready(function() {
+        // Newsletter form AJAX submission
+        $('#newsletter-form').on('submit', function(e) {
+            e.preventDefault();
+            
+            $.ajax({
+                type: 'POST',
+                url: "{{ url_for('main.newsletter_subscribe') }}",
+                data: $(this).serialize(),
+                success: function(response) {
+                    if (response.success) {
+                        $('#newsletter-result').html('<div class="alert alert-success">' + response.message + '</div>');
+                        $('#newsletter-form')[0].reset();
+                    } else {
+                        $('#newsletter-result').html('<div class="alert alert-danger">' + response.message + '</div>');
+                    }
+                },
+                error: function() {
+                    $('#newsletter-result').html('<div class="alert alert-danger">An error occurred. Please try again.</div>');
+                }
+            });
+        });
+    });
+</script>
+{% endblock %} 

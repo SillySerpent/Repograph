@@ -179,7 +179,7 @@ class TestDuplicatesAPIFiltering:
         shutil.copytree(fixture, repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             high_only = rg.duplicates(min_severity="high")
             medium_up = rg.duplicates(min_severity="medium")

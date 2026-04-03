@@ -1,0 +1,545 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow">
+            <div class="card-header bg-dark text-white">
+                <h4 class="mb-0">HydraFuel Product Survey</h4>
+            </div>
+            <div class="card-body p-4">
+                <p class="lead">Help us shape the future of HydraFuel by sharing your thoughts on our all-in-one supplement solution.</p>
+                
+                <form method="POST" action="{{ url_for('main.survey') }}" id="surveyForm">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="progress mb-4" style="height: 10px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 0%" id="survey-progress"></div>
+                    </div>
+                    
+                    <!-- Alert for validation errors -->
+                    <div class="alert alert-danger mb-4 d-none" id="validation-alert">
+                        Please fix the highlighted errors before submitting the survey.
+                    </div>
+                    
+                    <!-- Basic Info Section -->
+                    <div class="survey-section active" id="section-1" data-progress="20">
+                        <h5 class="section-title mb-4">Your Information</h5>
+                        <div class="row mb-4">
+                            <div class="col-md-6 mb-3 mb-md-0">
+                                <div class="form-group">
+                                    {{ form.name.label(class="form-label") }}
+                                    {{ form.name(class="form-control") }}
+                                    <div class="invalid-feedback d-none" id="name-error">Please provide your name.</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.email.label(class="form-label") }}
+                                    {{ form.email(class="form-control") }}
+                                    <div class="invalid-feedback d-none" id="email-error">Please provide a valid email address.</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.current_supplements.label(class="form-label fw-bold mb-3") }}
+                            <div class="supplements-options">
+                                {% for checkbox in form.current_supplements %}
+                                <div class="supplement-option">
+                                    {{ checkbox(class="btn-check") }}
+                                    {{ checkbox.label(class="supplement-label") }}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="button" class="btn btn-primary next-section" data-section="1">Next <i class="fas fa-arrow-right ms-1"></i></button>
+                        </div>
+                    </div>
+                    
+                    <!-- Interest & Importance Section -->
+                    <div class="survey-section" id="section-2" data-progress="40">
+                        <h5 class="section-title mb-4">Your Preferences</h5>
+                        
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold mb-3">{{ form.interest_level.label }}</label>
+                            <div class="rating-container">
+                                {% for subfield in form.interest_level %}
+                                    <div class="rating-option">
+                                        {{ subfield(class="btn-check") }}
+                                        {{ subfield.label(class="rating-label") }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="invalid-feedback d-none" id="interest-error">Please select your interest level.</div>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold mb-3">{{ form.effectiveness_rating.label }}</label>
+                            <div class="rating-container">
+                                {% for subfield in form.effectiveness_rating %}
+                                    <div class="rating-option">
+                                        {{ subfield(class="btn-check") }}
+                                        {{ subfield.label(class="rating-label") }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="invalid-feedback d-none" id="effectiveness-error">Please rate the importance of effectiveness.</div>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold mb-3">{{ form.value_rating.label }}</label>
+                            <div class="rating-container">
+                                {% for subfield in form.value_rating %}
+                                    <div class="rating-option">
+                                        {{ subfield(class="btn-check") }}
+                                        {{ subfield.label(class="rating-label") }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="invalid-feedback d-none" id="value-error">Please rate the importance of value.</div>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold mb-3">{{ form.convenience_rating.label }}</label>
+                            <div class="rating-container">
+                                {% for subfield in form.convenience_rating %}
+                                    <div class="rating-option">
+                                        {{ subfield(class="btn-check") }}
+                                        {{ subfield.label(class="rating-label") }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="invalid-feedback d-none" id="convenience-error">Please rate the importance of convenience.</div>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.price_preference.label(class="form-label fw-bold") }}
+                            {{ form.price_preference(class="form-select") }}
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-outline-secondary prev-section"><i class="fas fa-arrow-left me-1"></i> Previous</button>
+                            <button type="button" class="btn btn-primary next-section" data-section="2">Next <i class="fas fa-arrow-right ms-1"></i></button>
+                        </div>
+                    </div>
+                    
+                    <!-- Detailed Feedback Section -->
+                    <div class="survey-section" id="section-3" data-progress="70">
+                        <h5 class="section-title mb-4">Tell Us More</h5>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.specific_needs.label(class="form-label fw-bold") }}
+                            {{ form.specific_needs(class="form-control", rows=3) }}
+                            <small class="form-text text-muted">Examples: Energy boost, recovery, muscle gain, etc.</small>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.pain_points.label(class="form-label fw-bold") }}
+                            {{ form.pain_points(class="form-control", rows=3) }}
+                            <small class="form-text text-muted">Examples: Too expensive, bad taste, too many pills, etc.</small>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.expected_benefits.label(class="form-label fw-bold") }}
+                            {{ form.expected_benefits(class="form-control", rows=3) }}
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold mb-3">{{ form.purchase_likelihood.label }}</label>
+                            <div class="rating-container">
+                                {% for subfield in form.purchase_likelihood %}
+                                    <div class="rating-option">
+                                        {{ subfield(class="btn-check") }}
+                                        {{ subfield.label(class="rating-label") }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="invalid-feedback d-none" id="purchase-error">Please indicate your purchase likelihood.</div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-outline-secondary prev-section"><i class="fas fa-arrow-left me-1"></i> Previous</button>
+                            <button type="button" class="btn btn-primary next-section" data-section="3">Next <i class="fas fa-arrow-right ms-1"></i></button>
+                        </div>
+                    </div>
+                    
+                    <!-- Final Section -->
+                    <div class="survey-section" id="section-4" data-progress="100">
+                        <h5 class="section-title mb-4">Final Thoughts</h5>
+                        
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold mb-3">{{ form.heard_from.label }}</label>
+                            <div class="heard-from-options">
+                                {% for subfield in form.heard_from %}
+                                    <div class="heard-option">
+                                        {{ subfield(class="btn-check") }}
+                                        {{ subfield.label(class="heard-label") }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            {{ form.additional_comments.label(class="form-label fw-bold") }}
+                            {{ form.additional_comments(class="form-control", rows=4) }}
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-outline-secondary prev-section"><i class="fas fa-arrow-left me-1"></i> Previous</button>
+                            <button type="submit" class="btn btn-success btn-lg">{{ form.submit.label.text }}</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const sections = document.querySelectorAll('.survey-section');
+        const progressBar = document.getElementById('survey-progress');
+        const nextButtons = document.querySelectorAll('.next-section');
+        const prevButtons = document.querySelectorAll('.prev-section');
+        const surveyForm = document.getElementById('surveyForm');
+        const validationAlert = document.getElementById('validation-alert');
+        
+        // Initialize with first section active
+        updateProgress(sections[0].dataset.progress);
+        
+        // Handle form submission
+        surveyForm.addEventListener('submit', function(e) {
+            // Validate all sections
+            let isValid = true;
+            let firstInvalidSection = null;
+            
+            // Validate section 1
+            if (!validateSection('1', false)) {
+                isValid = false;
+                firstInvalidSection = 0;
+            }
+            
+            // Validate section 2
+            if (!validateSection('2', false)) {
+                isValid = false;
+                if (firstInvalidSection === null) {
+                    firstInvalidSection = 1;
+                }
+            }
+            
+            // Validate section 3
+            if (!validateSection('3', false)) {
+                isValid = false;
+                if (firstInvalidSection === null) {
+                    firstInvalidSection = 2;
+                }
+            }
+            
+            if (!isValid) {
+                e.preventDefault(); // Prevent form submission
+                
+                // Show validation alert
+                validationAlert.classList.remove('d-none');
+                
+                // Show the first section with errors
+                sections.forEach(section => section.classList.remove('active'));
+                sections[firstInvalidSection].classList.add('active');
+                updateProgress(sections[firstInvalidSection].dataset.progress);
+                
+                // Scroll to top of form
+                const formTop = document.querySelector('.card').offsetTop;
+                window.scrollTo({top: formTop - 100, behavior: 'smooth'});
+            }
+        });
+        
+        // Handle next button clicks with validation
+        nextButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const currentSection = this.closest('.survey-section');
+                const currentIndex = Array.from(sections).indexOf(currentSection);
+                const sectionNum = this.dataset.section;
+                
+                // Validate current section before proceeding
+                if (validateSection(sectionNum, true)) {
+                    if (currentIndex < sections.length - 1) {
+                        currentSection.classList.remove('active');
+                        sections[currentIndex + 1].classList.add('active');
+                        updateProgress(sections[currentIndex + 1].dataset.progress);
+                        
+                        // Hide validation alert if shown
+                        validationAlert.classList.add('d-none');
+                        
+                        // Scroll to top of form
+                        const formTop = document.querySelector('.card').offsetTop;
+                        window.scrollTo({top: formTop - 100, behavior: 'smooth'});
+                    }
+                }
+            });
+        });
+        
+        // Handle previous button clicks
+        prevButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const currentSection = this.closest('.survey-section');
+                const currentIndex = Array.from(sections).indexOf(currentSection);
+                
+                if (currentIndex > 0) {
+                    currentSection.classList.remove('active');
+                    sections[currentIndex - 1].classList.add('active');
+                    updateProgress(sections[currentIndex - 1].dataset.progress);
+                    
+                    // Hide validation alert if shown
+                    validationAlert.classList.add('d-none');
+                    
+                    // Scroll to top of form
+                    const formTop = document.querySelector('.card').offsetTop;
+                    window.scrollTo({top: formTop - 100, behavior: 'smooth'});
+                }
+            });
+        });
+        
+        function updateProgress(value) {
+            progressBar.style.width = value + '%';
+            progressBar.setAttribute('aria-valuenow', value);
+        }
+        
+        // Validate each section before proceeding
+        function validateSection(sectionNum, showErrors) {
+            let isValid = true;
+            
+            if (showErrors) {
+                // Reset all error messages
+                document.querySelectorAll('.invalid-feedback').forEach(el => {
+                    el.classList.add('d-none');
+                });
+                document.querySelectorAll('.form-control').forEach(el => {
+                    el.classList.remove('is-invalid');
+                });
+            }
+            
+            // Section 1 validation
+            if (sectionNum === '1') {
+                const nameInput = document.getElementById('name');
+                const emailInput = document.getElementById('email');
+                
+                if (!nameInput.value.trim()) {
+                    if (showErrors) {
+                        document.getElementById('name-error').classList.remove('d-none');
+                        nameInput.classList.add('is-invalid');
+                    }
+                    isValid = false;
+                }
+                
+                if (!emailInput.value.trim() || !isValidEmail(emailInput.value)) {
+                    if (showErrors) {
+                        document.getElementById('email-error').classList.remove('d-none');
+                        emailInput.classList.add('is-invalid');
+                    }
+                    isValid = false;
+                }
+            }
+            
+            // Section 2 validation
+            if (sectionNum === '2') {
+                // Check interest level
+                if (!isRadioSelected('interest_level')) {
+                    if (showErrors) {
+                        document.getElementById('interest-error').classList.remove('d-none');
+                    }
+                    isValid = false;
+                }
+                
+                // Check effectiveness rating
+                if (!isRadioSelected('effectiveness_rating')) {
+                    if (showErrors) {
+                        document.getElementById('effectiveness-error').classList.remove('d-none');
+                    }
+                    isValid = false;
+                }
+                
+                // Check value rating
+                if (!isRadioSelected('value_rating')) {
+                    if (showErrors) {
+                        document.getElementById('value-error').classList.remove('d-none');
+                    }
+                    isValid = false;
+                }
+                
+                // Check convenience rating
+                if (!isRadioSelected('convenience_rating')) {
+                    if (showErrors) {
+                        document.getElementById('convenience-error').classList.remove('d-none');
+                    }
+                    isValid = false;
+                }
+            }
+            
+            // Section 3 validation
+            if (sectionNum === '3') {
+                // Check purchase likelihood
+                if (!isRadioSelected('purchase_likelihood')) {
+                    if (showErrors) {
+                        document.getElementById('purchase-error').classList.remove('d-none');
+                    }
+                    isValid = false;
+                }
+            }
+            
+            return isValid;
+        }
+        
+        // Helper function to check if a radio button group is selected
+        function isRadioSelected(name) {
+            return document.querySelector(`input[name="${name}"]:checked`) !== null;
+        }
+        
+        // Helper function to validate email
+        function isValidEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+    });
+</script>
+<style>
+    .survey-section {
+        display: none;
+    }
+    .survey-section.active {
+        display: block;
+        animation: fadeIn 0.5s;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    .section-title {
+        color: #343a40;
+        border-bottom: 2px solid #e9ecef;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .supplements-options {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .supplement-option {
+        position: relative;
+    }
+    .supplement-label {
+        display: block;
+        padding: 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        background-color: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-align: center;
+    }
+    .supplement-label:hover {
+        background-color: #e9ecef;
+    }
+    .btn-check:checked + .supplement-label {
+        background-color: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+    
+    .rating-container {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+    .rating-option {
+        position: relative;
+        flex: 1;
+        margin: 0 4px;
+    }
+    .rating-label {
+        display: block;
+        padding: 10px 5px;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        background-color: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-align: center;
+        white-space: nowrap;
+        font-size: 0.9rem;
+    }
+    .rating-label:hover {
+        background-color: #e9ecef;
+    }
+    .btn-check:checked + .rating-label {
+        background-color: #198754;
+        color: white;
+        border-color: #198754;
+    }
+    
+    /* Error styling for radio groups */
+    .invalid-feedback:not(.d-none) + .rating-container,
+    .invalid-feedback:not(.d-none) ~ .rating-container {
+        border: 1px solid #dc3545;
+        border-radius: 5px;
+        padding: 5px;
+        background-color: rgba(220, 53, 69, 0.05);
+    }
+    
+    .heard-from-options {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .heard-option {
+        position: relative;
+    }
+    .heard-label {
+        display: block;
+        padding: 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        background-color: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-align: center;
+    }
+    .heard-label:hover {
+        background-color: #e9ecef;
+    }
+    .btn-check:checked + .heard-label {
+        background-color: #6c757d;
+        color: white;
+        border-color: #6c757d;
+    }
+    
+    .invalid-feedback {
+        display: none;
+    }
+    
+    .invalid-feedback:not(.d-none) {
+        display: block;
+        margin-top: 0.5rem;
+    }
+    
+    @media (max-width: 768px) {
+        .rating-container {
+            flex-direction: column;
+            gap: 10px;
+        }
+        .rating-option {
+            margin: 2px 0;
+        }
+        .supplements-options,
+        .heard-from-options {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+{% endblock %} 

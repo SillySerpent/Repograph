@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2>My Surveys</h2>
+                <a href="{{ url_for('main.profile') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Profile
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    {% if surveys %}
+        <div class="row">
+            {% for survey in surveys %}
+            <div class="col-lg-12 mb-4">
+                <div class="card">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Survey Submitted on {{ survey.submitted_at.strftime('%B %d, %Y') }}</h5>
+                        <span class="badge bg-primary">{{ loop.index }}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Basic Information</h6>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>Name:</span>
+                                        <span class="text-primary">{{ survey.name }}</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>Email:</span>
+                                        <span class="text-primary">{{ survey.email }}</span>
+                                    </li>
+                                    <li class="list-group-item">
+                                        <span class="d-block mb-1">Current Supplements:</span>
+                                        <div class="d-flex flex-wrap gap-1 mt-1">
+                                        {% set supplements = survey.current_supplements|from_json %}
+                                        {% if supplements %}
+                                            {% for supplement in supplements %}
+                                                <span class="badge bg-secondary">{{ supplement|replace('_', ' ')|capitalize }}</span>
+                                            {% endfor %}
+                                        {% else %}
+                                            <span class="text-primary">None</span>
+                                        {% endif %}
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Preferences & Ratings</h6>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>Interest Level:</span>
+                                        <span class="text-primary">{{ survey.interest_level }}/5</span>
+                                    </li>
+                                    {% if survey.effectiveness_rating %}
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>Effectiveness Importance:</span>
+                                        <span class="text-primary">{{ survey.effectiveness_rating }}/5</span>
+                                    </li>
+                                    {% endif %}
+                                    {% if survey.value_rating %}
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>Value Importance:</span>
+                                        <span class="text-primary">{{ survey.value_rating }}/5</span>
+                                    </li>
+                                    {% endif %}
+                                    {% if survey.convenience_rating %}
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>Convenience Importance:</span>
+                                        <span class="text-primary">{{ survey.convenience_rating }}/5</span>
+                                    </li>
+                                    {% endif %}
+                                    {% if survey.purchase_likelihood %}
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>Purchase Likelihood:</span>
+                                        <span class="text-primary">{{ survey.purchase_likelihood }}/5</span>
+                                    </li>
+                                    {% endif %}
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>Price Preference:</span>
+                                        <span class="text-primary">{{ survey.price_preference }}</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        {% if survey.specific_needs or survey.pain_points or survey.expected_benefits %}
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <h6 class="text-muted">Detailed Feedback</h6>
+                                <div class="accordion" id="surveyFeedback{{ survey.id }}">
+                                    {% if survey.specific_needs %}
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header" id="headingNeeds{{ survey.id }}">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseNeeds{{ survey.id }}" aria-expanded="false" aria-controls="collapseNeeds{{ survey.id }}">
+                                                Specific Needs
+                                            </button>
+                                        </h2>
+                                        <div id="collapseNeeds{{ survey.id }}" class="accordion-collapse collapse" aria-labelledby="headingNeeds{{ survey.id }}" data-bs-parent="#surveyFeedback{{ survey.id }}">
+                                            <div class="accordion-body">
+                                                {{ survey.specific_needs }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    {% if survey.pain_points %}
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header" id="headingPain{{ survey.id }}">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePain{{ survey.id }}" aria-expanded="false" aria-controls="collapsePain{{ survey.id }}">
+                                                Pain Points with Current Options
+                                            </button>
+                                        </h2>
+                                        <div id="collapsePain{{ survey.id }}" class="accordion-collapse collapse" aria-labelledby="headingPain{{ survey.id }}" data-bs-parent="#surveyFeedback{{ survey.id }}">
+                                            <div class="accordion-body">
+                                                {{ survey.pain_points }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    {% if survey.expected_benefits %}
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header" id="headingBenefits{{ survey.id }}">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseBenefits{{ survey.id }}" aria-expanded="false" aria-controls="collapseBenefits{{ survey.id }}">
+                                                Expected Benefits
+                                            </button>
+                                        </h2>
+                                        <div id="collapseBenefits{{ survey.id }}" class="accordion-collapse collapse" aria-labelledby="headingBenefits{{ survey.id }}" data-bs-parent="#surveyFeedback{{ survey.id }}">
+                                            <div class="accordion-body">
+                                                {{ survey.expected_benefits }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if survey.additional_comments %}
+                        <div class="row">
+                            <div class="col-12">
+                                <h6 class="text-muted">Additional Comments</h6>
+                                <p>{{ survey.additional_comments }}</p>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="text-end mt-3">
+                            <a href="{{ url_for('main.survey') }}" class="btn btn-primary btn-sm">Take Another Survey</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="row">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <h4 class="alert-heading">No Surveys Yet</h4>
+                    <p>You haven't completed any surveys yet. We'd love to hear your feedback!</p>
+                    <hr>
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                        <a href="{{ url_for('main.survey') }}" class="btn btn-primary">Take Survey Now</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %} 

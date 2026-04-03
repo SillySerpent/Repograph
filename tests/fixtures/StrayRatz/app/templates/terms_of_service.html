@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container policy-container">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card policy-card">
+                <div class="card-header bg-dark text-white">
+                    <h1 class="policy-title">Terms of Service</h1>
+                </div>
+                <div class="card-body">
+                    <div class="policy-effective-date">
+                        <p><strong>Last Updated:</strong> {{ now.strftime('%B %d, %Y') }}</p>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>1. Acceptance of Terms</h2>
+                        <p>By accessing or using the HydraFuel website (the "Site"), or any services provided by HydraFuel (collectively, the "Services"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you must not access or use our Services.</p>
+                        <p>We may modify these Terms at any time. Your continued use of our Services after we post modifications constitutes your acceptance of the modified Terms.</p>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>2. Proprietary Rights</h2>
+                        <p>All content on the Site and Services, including but not limited to designs, text, graphics, images, video, information, logos, software, audio and other files, and their selection and arrangement, is the exclusive property of HydraFuel or its licensors and is protected by copyright, trademark, and other intellectual property laws.</p>
+                        <p>No part of the Site or Services may be reproduced, modified, distributed, sold, transferred, published, displayed, performed, or created derivative works from without our prior written permission.</p>
+                        <p>Our software is protected by copyright and other intellectual property laws throughout the world. Any unauthorized use, reproduction, modification, distribution, transmission, display, or performance of our software is strictly prohibited.</p>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>3. User Accounts</h2>
+                        <p>To access certain features of our Services, you may be required to create an account. You are responsible for maintaining the confidentiality of your account information, including your password, and for all activity that occurs under your account.</p>
+                        <p>You agree to:</p>
+                        <ul>
+                            <li>Provide accurate and complete information when creating your account</li>
+                            <li>Update your account information as necessary to maintain its accuracy</li>
+                            <li>Notify us immediately of any unauthorized access to or use of your account</li>
+                            <li>Be responsible for all activities that occur under your account</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>4. Prohibited Conduct</h2>
+                        <p>You agree not to:</p>
+                        <ul>
+                            <li>Use the Services in any manner that could damage, disable, overburden, or impair the Services</li>
+                            <li>Attempt to gain unauthorized access to any part of the Services or any systems or networks connected to the Services</li>
+                            <li>Use any robot, spider, or other automated device to access the Services</li>
+                            <li>Copy, reproduce, distribute, republish, download, display, post, or transmit any part of the Services</li>
+                            <li>Reverse engineer, decompile, disassemble, or attempt to derive the source code of any software provided through the Services</li>
+                            <li>Use the Services for any unlawful purpose or in violation of any applicable laws</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>5. Termination</h2>
+                        <p>We may terminate or suspend your access to the Services immediately, without prior notice or liability, for any reason, including if you breach these Terms.</p>
+                        <p>Upon termination, your right to use the Services will immediately cease. All provisions of these Terms that by their nature should survive termination shall survive, including ownership provisions, warranty disclaimers, indemnity, and limitations of liability.</p>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>6. Disclaimer of Warranties</h2>
+                        <p>THE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.</p>
+                        <p>HYDRAFUEL DOES NOT WARRANT THAT THE SERVICES WILL BE UNINTERRUPTED OR ERROR-FREE, THAT DEFECTS WILL BE CORRECTED, OR THAT THE SERVICES OR THE SERVER THAT MAKES IT AVAILABLE ARE FREE OF VIRUSES OR OTHER HARMFUL COMPONENTS.</p>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>7. Limitation of Liability</h2>
+                        <p>IN NO EVENT SHALL HYDRAFUEL BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES, RESULTING FROM YOUR ACCESS TO OR USE OF OR INABILITY TO ACCESS OR USE THE SERVICES.</p>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>8. Indemnification</h2>
+                        <p>You agree to indemnify, defend, and hold harmless HydraFuel and its officers, directors, employees, agents, and affiliates from and against any claims, liabilities, damages, losses, and expenses, including reasonable attorneys' fees, arising out of or in any way connected with your access to or use of the Services or your violation of these Terms.</p>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>9. Governing Law</h2>
+                        <p>These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which HydraFuel operates, without regard to its conflict of law provisions.</p>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>10. Contact Information</h2>
+                        <p>For questions about these Terms, please contact us at {{ config.MAIL_USERNAME }}.</p>
+                    </div>
+                    
+                    <div class="policy-section">
+                        <h2>11. Code Ownership and Restrictions</h2>
+                        <p>The source code, design, structure, organization, and all other aspects of the HydraFuel application ("Code") are proprietary to HydraFuel and protected by copyright and other intellectual property laws.</p>
+                        <p>You are expressly prohibited from:</p>
+                        <ul>
+                            <li>Copying, reproducing, distributing, or using any portion of the Code for any purpose</li>
+                            <li>Modifying, adapting, translating, or creating derivative works based on the Code</li>
+                            <li>Reverse engineering, decompiling, disassembling, or attempting to derive the source code of the application</li>
+                            <li>Removing, altering, or obscuring any copyright, trademark, or other proprietary notices</li>
+                            <li>Using any concepts, features, functions, or graphics similar to the application</li>
+                        </ul>
+                        <p>Any unauthorized use of the Code is strictly prohibited and may result in severe civil and criminal penalties, including monetary damages, and will be prosecuted to the maximum extent possible under law.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block additional_head %}
+<style>
+    .policy-container {
+        margin: 3rem auto;
+    }
+    
+    .policy-card {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        border: none;
+        margin-bottom: 3rem;
+    }
+    
+    .policy-title {
+        font-size: 2rem;
+        margin-bottom: 0;
+    }
+    
+    .policy-effective-date {
+        margin-bottom: 2rem;
+        color: #666;
+    }
+    
+    .policy-section {
+        margin-bottom: 2.5rem;
+    }
+    
+    .policy-section h2 {
+        border-bottom: 1px solid #e9ecef;
+        padding-bottom: 0.75rem;
+        margin-bottom: 1.5rem;
+        color: #343a40;
+    }
+    
+    .policy-section h3 {
+        font-size: 1.25rem;
+        color: #495057;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .policy-section ul {
+        padding-left: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .policy-section ul li {
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %} 

@@ -239,7 +239,7 @@ class TestImp2DeadCodeTiers:
         _copy(SIMPLE, repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             definite = rg.dead_code(min_tier="definitely_dead")
             probable = rg.dead_code(min_tier="probably_dead")
@@ -260,7 +260,7 @@ class TestImp2DeadCodeTiers:
         _copy(SIMPLE, repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             results = rg.dead_code()
 
@@ -276,7 +276,7 @@ class TestImp2DeadCodeTiers:
         _copy(os.path.join(FIXTURES, "module_level_call"), repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             results = rg.dead_code(min_tier="possibly_dead")
 
@@ -297,7 +297,7 @@ class TestImp3DuplicateDetection:
         _copy(os.path.join(FIXTURES, "duplicate_symbols"), repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             dups = rg.duplicates()
 
@@ -309,7 +309,7 @@ class TestImp3DuplicateDetection:
         _copy(os.path.join(FIXTURES, "duplicate_symbols"), repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             dups = rg.duplicates(min_severity="high")
 
@@ -322,7 +322,7 @@ class TestImp3DuplicateDetection:
         _copy(os.path.join(FIXTURES, "duplicate_symbols"), repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             dups = rg.duplicates()
 
@@ -362,14 +362,9 @@ class TestImp4DocWarnings:
         rg_dir = str(tmp_path / ".repograph")
         _copy(os.path.join(FIXTURES, "doc_staleness"), repo)
 
-        orig = os.getcwd()
-        os.chdir(repo)
-        try:
-            _full_run(repo, rg_dir)
-        finally:
-            os.chdir(orig)
+        _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             warnings = rg.doc_warnings()
 
@@ -380,14 +375,9 @@ class TestImp4DocWarnings:
         rg_dir = str(tmp_path / ".repograph")
         _copy(os.path.join(FIXTURES, "doc_staleness"), repo)
 
-        orig = os.getcwd()
-        os.chdir(repo)
-        try:
-            _full_run(repo, rg_dir)
-        finally:
-            os.chdir(orig)
+        _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             warnings = rg.doc_warnings()
 
@@ -402,12 +392,7 @@ class TestImp4DocWarnings:
         rg_dir = str(tmp_path / ".repograph")
         _copy(os.path.join(FIXTURES, "doc_staleness"), repo)
 
-        orig = os.getcwd()
-        os.chdir(repo)
-        try:
-            _full_run(repo, rg_dir)
-        finally:
-            os.chdir(orig)
+        _full_run(repo, rg_dir)
 
         s = _store(rg_dir)
         count1 = len(s.get_all_doc_warnings())
@@ -447,7 +432,7 @@ class TestRegression:
         rg_dir = str(tmp_path / ".repograph")
         _copy(SIMPLE, repo)
         _full_run(repo, rg_dir)
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             assert isinstance(rg.dead_code(), list)
 
@@ -456,7 +441,7 @@ class TestRegression:
         rg_dir = str(tmp_path / ".repograph")
         _copy(SIMPLE, repo)
         _full_run(repo, rg_dir)
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             assert isinstance(rg.entry_points(), list)
 
@@ -579,7 +564,7 @@ class TestCommunityIsolatedSingletons:
         _copy(self.ISOLATE_FIXTURE, repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             comms = rg.communities()
 
@@ -603,7 +588,7 @@ class TestCommunityIsolatedSingletons:
         _copy(FLASK, repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             comms = rg.communities()
 
@@ -683,7 +668,7 @@ class TestDeadCodeContext:
         _copy(self.FIXTURE, repo)
         _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             dead = rg.dead_code()
 

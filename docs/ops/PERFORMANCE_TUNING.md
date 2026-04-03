@@ -13,12 +13,23 @@ This document covers what to tune and how to measure the effect.
 | `workers` | `os.cpu_count()` | Thread count for parallel file parsing (Phase 3). |
 | `continue_on_error` | `True` | Whether to continue when a phase fails. `False` makes failures immediately visible. |
 
-Set these via `repograph.yaml`:
+Persisted user-facing settings live in `.repograph/settings.json` and optional
+power-user overrides in `.repograph/repograph.index.yaml`. The persisted key for
+pathway context size is `context_tokens`; the internal `RunConfig` field is
+`max_context_tokens`.
+
+Set these via the CLI:
+
+```bash
+repograph config set min_community_size 5
+repograph config set context_tokens 1500
+```
+
+Or via `.repograph/repograph.index.yaml`:
 
 ```yaml
 min_community_size: 5
-module_expansion_threshold: 10
-max_context_tokens: 1500
+context_tokens: 1500
 ```
 
 Or programmatically:
@@ -37,7 +48,7 @@ The slowest phases are typically:
 |-------|-------------|-------------|
 | `p03_parse` | File parsing | `workers` (parallel) |
 | `p09_communities` | Leiden community detection | `min_community_size` (fewer large communities = faster) |
-| `p13_pathways` | Pathway assembly | `max_context_tokens` (smaller = fewer tokens to process) |
+| `pathway_contexts` exporter | Pathway context generation | `context_tokens` / `max_context_tokens` (smaller = fewer tokens to process) |
 
 Dynamic full rebuilds also emit spans for:
 - `dynamic_full.step1_static_rebuild`

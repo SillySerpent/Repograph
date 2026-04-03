@@ -27,3 +27,20 @@ def test_resource_lifecycle_methods_are_demoted() -> None:
         callers_count=0,
     ).final_score
     assert close_score < handler_score
+
+
+def test_open_method_is_treated_as_lifecycle_plumbing() -> None:
+    open_score = score_function_verbose(
+        {
+            "name": "open",
+            "qualified_name": "TraceWriter.open",
+            "file_path": "repograph/runtime/trace_writer.py",
+            "is_exported": False,
+            "decorators": [],
+        },
+        callees_count=6,
+        callers_count=0,
+    )
+
+    labels = [label for label, _mult in open_score.multipliers]
+    assert "resource_lifecycle_demote" in labels

@@ -19,7 +19,7 @@ def _make_service(rows=None):
 
 
 def _engine(service=None, model="test-model"):
-    from repograph.mcp.nl_query import NLQueryEngine
+    from repograph.surfaces.mcp.nl_query import NLQueryEngine
     return NLQueryEngine(service or _make_service(), model=model)
 
 
@@ -169,7 +169,7 @@ def test_null_cypher_returns_error():
 
 def test_rows_truncated_at_max():
     """Results beyond MAX_ROWS must be truncated and truncated=True."""
-    from repograph.mcp.nl_query import MAX_ROWS
+    from repograph.surfaces.mcp.nl_query import MAX_ROWS
 
     big_rows = [[str(i)] for i in range(MAX_ROWS + 50)]
     svc = _make_service(rows=big_rows)
@@ -189,7 +189,7 @@ def test_rows_truncated_at_max():
 
 def test_rows_not_truncated_under_limit():
     """Results within MAX_ROWS must have truncated=False."""
-    from repograph.mcp.nl_query import MAX_ROWS
+    from repograph.surfaces.mcp.nl_query import MAX_ROWS
 
     svc = _make_service(rows=[[str(i)] for i in range(MAX_ROWS - 1)])
     engine = _engine(svc)

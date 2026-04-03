@@ -129,7 +129,7 @@ def get_repo(argv_path: str | None) -> str:
 
 
 def open_rg(repo: str):
-    from repograph.api import RepoGraph
+    from repograph.surfaces.api import RepoGraph
 
     return RepoGraph(repo)
 

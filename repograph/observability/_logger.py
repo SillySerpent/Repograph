@@ -45,9 +45,12 @@ _SUBSYSTEM_MAP: list[tuple[str, str]] = [
     ("repograph.graph_store", "graph_store"),
     ("repograph.runtime", "runtime"),
     ("repograph.services", "services"),
+    ("repograph.surfaces.cli", "cli"),
+    ("repograph.surfaces.mcp", "mcp"),
     ("repograph.interactive", "cli"),
     ("repograph.mcp", "mcp"),
     ("repograph.diagnostics", "setup"),
+    ("repograph.settings", "config"),
     ("repograph.config", "config"),
     ("repograph.observability", "observability"),
 ]

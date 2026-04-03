@@ -1,4 +1,4 @@
-"""Unit tests for ``_parse_init_type_annotations`` in store_queries_analytics.
+"""Unit tests for ``_parse_init_type_annotations`` in store_queries_nodes.
 
 These test the signature parser in isolation — no DB, no filesystem.
 
@@ -6,7 +6,7 @@ INVARIANT: The function is pure; all tests run without any I/O.
 """
 from __future__ import annotations
 
-from repograph.graph_store.store_queries_analytics import _parse_init_type_annotations
+from repograph.graph_store.store_queries_nodes import _parse_init_type_annotations
 
 
 def test_simple_typed_params():

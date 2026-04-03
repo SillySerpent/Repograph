@@ -33,13 +33,7 @@ class TestDocStaleReferenceDetection:
         rg_dir = str(tmp_path / ".repograph")
         shutil.copytree(fixture, repo)
 
-        # Run from the repo dir so p14 can resolve paths
-        orig = os.getcwd()
-        os.chdir(repo)
-        try:
-            _full_run(repo, rg_dir)
-        finally:
-            os.chdir(orig)
+        _full_run(repo, rg_dir)
 
         store = _open_store(rg_dir)
         warnings = store.get_all_doc_warnings()
@@ -60,12 +54,7 @@ class TestDocStaleReferenceDetection:
         rg_dir = str(tmp_path / ".repograph")
         shutil.copytree(fixture, repo)
 
-        orig = os.getcwd()
-        os.chdir(repo)
-        try:
-            _full_run(repo, rg_dir)
-        finally:
-            os.chdir(orig)
+        _full_run(repo, rg_dir)
 
         store = _open_store(rg_dir)
         count_first = len(store.get_all_doc_warnings())
@@ -91,14 +80,9 @@ class TestDocWarningsAPIFilter:
         rg_dir = str(tmp_path / ".repograph")
         shutil.copytree(fixture, repo)
 
-        orig = os.getcwd()
-        os.chdir(repo)
-        try:
-            _full_run(repo, rg_dir)
-        finally:
-            os.chdir(orig)
+        _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             warnings = rg.doc_warnings(severity="high")
 
@@ -113,14 +97,9 @@ class TestDocWarningsAPIFilter:
         rg_dir = str(tmp_path / ".repograph")
         shutil.copytree(fixture, repo)
 
-        orig = os.getcwd()
-        os.chdir(repo)
-        try:
-            _full_run(repo, rg_dir)
-        finally:
-            os.chdir(orig)
+        _full_run(repo, rg_dir)
 
-        from repograph.api import RepoGraph
+        from repograph.surfaces.api import RepoGraph
         with RepoGraph(repo, repograph_dir=rg_dir) as rg:
             warnings = rg.doc_warnings()
 
@@ -149,12 +128,7 @@ class TestDocCheckerSkipsKnownNoise:
         with open(os.path.join(repo, "docs", "guide.md"), "w") as f:
             f.write("Use `True` or `False`. Never `None`. The `list` type.\n")
 
-        orig = os.getcwd()
-        os.chdir(repo)
-        try:
-            _full_run(repo, rg_dir)
-        finally:
-            os.chdir(orig)
+        _full_run(repo, rg_dir)
 
         store = _open_store(rg_dir)
         warnings = store.get_all_doc_warnings()
@@ -176,12 +150,7 @@ class TestDocCheckerSkipsKnownNoise:
         with open(os.path.join(repo, "docs", "guide.md"), "w") as f:
             f.write("Use `x` or `fn` or `id`.\n")
 
-        orig = os.getcwd()
-        os.chdir(repo)
-        try:
-            _full_run(repo, rg_dir)
-        finally:
-            os.chdir(orig)
+        _full_run(repo, rg_dir)
 
         store = _open_store(rg_dir)
         warnings = store.get_all_doc_warnings()
@@ -190,3 +159,23 @@ class TestDocCheckerSkipsKnownNoise:
         short_warned = [w for w in warnings
                         if len(w["symbol_text"]) < 3]
         assert short_warned == []
+
+    def test_doc_checker_works_from_unrelated_cwd(self, tmp_path, monkeypatch):
+        repo = str(tmp_path / "repo")
+        rg_dir = str(tmp_path / ".repograph")
+        outside = tmp_path / "elsewhere"
+        outside.mkdir()
+        os.makedirs(os.path.join(repo, "src"), exist_ok=True)
+        os.makedirs(os.path.join(repo, "docs"), exist_ok=True)
+        with open(os.path.join(repo, "src", "helpers.py"), "w", encoding="utf-8") as f:
+            f.write("def helper():\n    return 1\n")
+        with open(os.path.join(repo, "docs", "guide.md"), "w", encoding="utf-8") as f:
+            f.write("Use `helper` from src/legacy.py when migrating examples.\n")
+
+        monkeypatch.chdir(outside)
+        _full_run(repo, rg_dir)
+
+        store = _open_store(rg_dir)
+        warnings = store.get_all_doc_warnings()
+        store.close()
+        assert any(w["warning_type"] == "moved_reference" for w in warnings)

@@ -19,7 +19,7 @@ p01 -> p02 -> p03 -> p04 -> p05 -> p05b -> p06 -> p07 -> p08 -> p09 -> p10
                                                            \-> p13 (optional)
 then:
 on_graph_built -> on_evidence -> on_export
-if traces exist:
+if runtime inputs exist:
 on_traces_collected -> on_traces_analyzed
 ```
 
@@ -145,7 +145,7 @@ dead-code on type-only classes.
 
 Runs the Leiden community detection algorithm over the call graph to
 identify tightly coupled module clusters. Micro-communities below
-`min_community_size` (default 8) are merged into their most-connected
+`min_community_size` (default 3) are merged into their most-connected
 neighbour.
 
 ---
@@ -254,6 +254,7 @@ Several user-facing outputs are produced by plugins via hooks instead of numbere
 See:
 
 - `repograph/pipeline/runner.py`
+- `repograph/pipeline/runner_parts/`
 - `repograph/plugins/`
 - `repograph/pipeline/README.md`
 
