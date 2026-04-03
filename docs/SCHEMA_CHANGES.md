@@ -100,6 +100,6 @@ Distinct from `CALLS` because it spans language boundaries and carries HTTP meta
 
 A function is **covered** if at least one body line (`line_start+1` to `line_end`) appears in the `executed_lines` list of its file's entry in `coverage.json`.
 
-**How to generate:** Run `pytest --cov --cov-report=json` to produce `coverage.json`, then run `repograph sync` — the plugin fires on `on_traces_collected`.
+**How to generate:** Run `pytest --cov --cov-report=json` to produce `coverage.json`, then run `repograph sync`. The coverage overlay now registers as a dynamic analyzer on `on_traces_collected` and runs opportunistically whenever `coverage.json` is present, even if no runtime trace files exist. Check `health.json` / `status()["health"]["analysis_readiness"]` to see whether it actually ran for the current index.
 
 **Upgrade:** `_migrate_coverage_columns` in `GraphStoreBase.initialize_schema()`.
