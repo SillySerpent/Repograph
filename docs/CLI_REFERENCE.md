@@ -45,7 +45,7 @@ repograph sync [PATH] [OPTIONS]
 | Flag | Description |
 |------|-------------|
 | `--full` | Canonical one-shot full rebuild: rebuild static index, auto-run traced tests when available, then merge runtime overlay |
-| `--static-only` | Force complete rebuild from scratch with **no** automatic test execution |
+| `--static-only` | Force a pure static rebuild from scratch with **no** automatic test execution and **no** merge of on-disk runtime/coverage inputs |
 | `--embeddings` | Generate vector embeddings (requires `sentence-transformers`) |
 | `--no-git` | Skip git co-change coupling phase (Phase 12) |
 | `--strict` | Fail sync if any optional phase errors |
@@ -53,10 +53,17 @@ repograph sync [PATH] [OPTIONS]
 | `--include-tests-config-registry` | Include test files when building `config_registry.json` |
 
 Automatic dynamic-analysis command resolution for `--full`:
-1. `sync_test_command` from `repograph.index.yaml`, if present
-2. `python -m pytest tests` when `pyproject.toml` configures pytest and `tests/` exists
-3. `python -m pytest` when `pyproject.toml` configures pytest without a `tests/` directory
-4. otherwise the full rebuild completes statically and health/report metadata record that dynamic analysis was skipped
+1. detect repo-scoped live runtime targets and, when there is exactly one repo-scoped Python server already publishing a RepoGraph live trace session, ask for confirmation before attaching in the CLI; unattended/API usage should set `sync_runtime_attach_policy` to `always` or `never`; otherwise `sync`, `status`, and `report` surface whether attach was unavailable, declined, unsupported, or ambiguous before RepoGraph falls back
+2. `sync_runtime_server_command` + `sync_runtime_probe_url` from `settings.json` (or `repograph.index.yaml`) to launch a managed traced Python server, optionally request `sync_runtime_scenario_urls`, and optionally run `sync_runtime_scenario_driver_command` for richer flows
+3. `sync_test_command` from `settings.json` (set via `repograph config set`) or `repograph.index.yaml`
+4. `python -m pytest tests` when `pyproject.toml` configures pytest and `tests/` exists
+5. `python -m pytest` when `pyproject.toml` configures pytest without a `tests/` directory
+6. `python -m pytest <dir>` when a `tests/`, `test/`, or `spec/` directory containing `.py` files is found
+7. otherwise the full rebuild completes statically and health/report metadata record why dynamic analysis was skipped
+
+If live attach is selected and later fails at execution time, RepoGraph records
+the failed attach attempt and then tries the next eligible managed-runtime or
+traced-test path instead of claiming the live attach succeeded.
 
 ---
 
@@ -73,6 +80,19 @@ repograph summary [PATH] [--json] [--verbose]
 |------|-------------|
 | `--json` | Output as machine-readable JSON |
 | `--verbose / -v` | Show score breakdown for each entry point |
+
+`summary` is the compact high-signal overview built from a capped `report`
+snapshot. It surfaces repo purpose, index/trust state, top entry surfaces,
+top pathways, major risks, structural hotspots, and dynamic-analysis status.
+
+Stable `summary --json` contract:
+
+- Top-level keys: `repo`, `purpose`, `stats`, `health`, `dynamic_analysis`, `trust`, `top_entry_points`, `top_pathways`, `major_risks`, `structural_hotspots`, `warnings`, `dead_code_count`, `dead_code_sample`, `high_severity_duplicates`, `duplicate_sample`, `doc_warning_count`
+- `trust`: `status`, `sync_status`, `sync_mode`, `warnings`, `analysis_readiness`
+- `top_entry_points[]`: `name`, `file`, `score`, `callers`, `callees`, `entry_score_base`, `entry_score_multipliers`
+- `top_pathways[]`: `name`, `entry`, `steps`, `importance`, `confidence`, `source`
+- `major_risks[]`: `kind`, `severity`, `count`, `summary`
+- `structural_hotspots[]`: `module`, `category`, `summary`, `function_count`, `class_count`, `test_function_count`, `dead_code_count`, `duplicate_count`, `issue_count`, `complexity`
 
 Scores and rankings depend on the indexed repo and analyzer version.
 
@@ -120,13 +140,38 @@ repograph modules [PATH] [OPTIONS]
 
 ---
 
-## `repograph config`
+## `repograph config` (settings subgroup)
+
+Manage persistent RepoGraph settings.  Settings are stored in `.repograph/settings.json`
+as a self-describing settings document. The editable `runtime_overrides` section
+takes precedence over YAML-level defaults, while the same file also shows the
+current effective values and per-setting schema metadata.
+
+```
+repograph config list [PATH]             # show all settings and current values
+repograph config get KEY [PATH]          # read one setting
+repograph config describe [KEY] [PATH]   # show schema/default/lifecycle details
+repograph config set KEY VALUE [PATH]    # persist a value
+repograph config unset KEY [PATH]        # remove one runtime override
+repograph config reset [PATH]            # clear overrides, refresh the settings document
+```
+
+Known settings keys: `include_git`, `include_embeddings`, `auto_dynamic_analysis`,
+`sync_test_command`, `sync_runtime_server_command`, `sync_runtime_probe_url`,
+`sync_runtime_scenario_urls`, `sync_runtime_scenario_driver_command`,
+`sync_runtime_ready_timeout`, `sync_runtime_attach_policy`,
+`doc_symbols_flag_unknown`, `context_tokens`, `git_days`, `entry_point_limit`,
+`min_community_size`, `nl_model`, `exclude_dirs`, `disable_auto_excludes`.
+
+---
+
+## `repograph config-registry`
 
 Global config-key → consumer mapping.  Use `--key` to see the blast radius
 of renaming a single config value.
 
 ```
-repograph config [PATH] [--key NAME] [--top N] [--json] [--include-tests]
+repograph config-registry [PATH] [--key NAME] [--top N] [--json] [--include-tests]
 ```
 
 | Flag | Description |
@@ -219,6 +264,16 @@ repograph node <identifier> [--path PATH]
 `identifier` can be a relative file path (`src/bots/champion_bot.py`) or
 a symbol name (`ChampionBot.on_tick`).
 
+Resolution order is deterministic:
+- exact file path
+- exact qualified symbol name
+- exact simple symbol name
+- light normalized symbol forms such as `pkg::Class.method`
+- fuzzy fallback
+
+If multiple symbols still match, RepoGraph prints an ambiguity table and exits
+non-zero instead of silently picking the first fuzzy match.
+
 ---
 
 ## `repograph impact SYMBOL`
@@ -232,6 +287,10 @@ repograph impact <symbol> [--depth N] [--path PATH]
 | Flag | Description |
 |------|-------------|
 | `--depth / -d N` | Call-graph hops to traverse (default 3) |
+
+`impact` uses the same deterministic symbol resolution rules as `node`.
+If the lookup is ambiguous, RepoGraph returns the candidate list and exits
+non-zero instead of choosing one arbitrarily.
 
 ---
 
@@ -264,8 +323,9 @@ Health status values:
 ## `repograph trace install`
 
 Install runtime tracing instrumentation for the next test/run session.
-This is now an **advanced/manual** workflow; routine runtime overlay happens on
-`repograph sync --full`.
+This is an **advanced/manual** workflow; start with `repograph sync --full`
+unless you explicitly want to write instrumentation files and inspect raw JSONL
+yourself.
 
 ```
 repograph trace install [PATH] [OPTIONS]
@@ -273,7 +333,7 @@ repograph trace install [PATH] [OPTIONS]
 
 | Flag | Description |
 |------|-------------|
-| `--mode / -m` | `pytest` (writes `conftest.py`) or `sitecustomize` |
+| `--mode / -m` | `pytest` (writes `conftest.py`) or `sitecustomize` (live Python attach bootstrap) |
 | `--max-records` | Max records per trace session (0 = unlimited) |
 | `--max-mb` | Max per-file trace size in MB before rotation/drop logic |
 | `--rotate-files` | Number of extra rotated files when `--max-mb` is hit |
@@ -286,7 +346,9 @@ repograph trace install [PATH] [OPTIONS]
 ## `repograph trace collect`
 
 List collected traces under `.repograph/runtime/`. This is read-only; it does
-not merge anything into the graph.
+not merge anything into the graph. Use it when you are manually inspecting
+trace volume or payload presence after `trace install` or another custom trace
+workflow.
 
 ```
 repograph trace collect [PATH] [--json]
@@ -300,7 +362,9 @@ repograph trace collect [PATH] [--json]
 
 ## `repograph trace report`
 
-Summarize runtime overlay diagnostics for collected traces.
+Summarize runtime overlay diagnostics for already-collected traces. This is
+primarily for manual runtime-debugging workflows; the standard full-power path
+is still `repograph sync --full`.
 
 ```
 repograph trace report [PATH] [--top N] [--json]
