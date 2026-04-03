@@ -1,6 +1,39 @@
 # RepoGraph Pipeline Reference
 
-RepoGraph runs in two layers:
+RepoGraph has one static graph-build pipeline plus a runtime-aware full-sync coordinator.
+
+For the broadest validated local baseline when reproducing the current verified
+suite of over **1.24k passing tests**, use the **Full local workstation**
+install tier documented in [`SETUP.md`](SETUP.md). Install Node.js as well only
+if you plan to run the optional Pyright quality gate.
+
+## Runner layout
+
+[`repograph/pipeline/runner.py`](../repograph/pipeline/runner.py) is the stable public facade used by CLI, services, and tests. The implementation is split under [`repograph/pipeline/runner_parts/`](../repograph/pipeline/runner_parts/) by responsibility:
+
+- `config.py` — `RunConfig` and validation
+- `shared.py` — observability scopes, warning policy, and cleanup helpers
+- `build.py` — static phase execution and optional SPI phases
+- `hooks.py` — post-build hook execution and summary merging
+- `full.py` — full static rebuild coordination
+- `incremental.py` — incremental coordination
+- `full_runtime.py` — full rebuild plus runtime-plan execution and overlay merge
+
+## Canonical full-power flow
+
+`repograph sync --full` is the documented full-power workflow. When `auto_dynamic_analysis` is enabled, RepoGraph:
+
+1. rebuilds the static graph,
+2. resolves a runtime plan (`attach_live_python`, `managed_python_server`, `traced_tests`, `existing_inputs`, or `none`),
+3. executes that plan when appropriate,
+4. merges runtime and coverage overlays,
+5. finalizes hook/export outputs and health metadata.
+
+`repograph sync --static-only` uses the same static build path without runtime-plan execution or runtime-input merge.
+
+## Static graph build and hook layers
+
+RepoGraph then runs in two layers:
 
 1. **Core graph-build phases** in `repograph/pipeline/phases/` (p01-p13).
 2. **Plugin hooks** after graph build (`on_graph_built`, `on_evidence`, `on_export`, runtime-trace hooks).
@@ -14,9 +47,9 @@ Optional failures in optional phases/hooks are tolerated unless `--strict` is se
 ## Execution Map
 
 ```
-p01 -> p02 -> p03 -> p04 -> p05 -> p05b -> p06 -> p07 -> p08 -> p09 -> p10
-                                                           \-> p12 (optional)
-                                                           \-> p13 (optional)
+p01 -> p02 -> p03 -> p03b -> p04 -> p05 -> p05b -> p05c -> p06 -> p06b -> p07 -> p08 -> p09 -> p10
+                                                                                               \-> p12 (optional)
+                                                                                               \-> p13 (optional)
 then:
 on_graph_built -> on_evidence -> on_export
 if runtime inputs exist:
@@ -64,6 +97,17 @@ plugin.
 
 ---
 
+### p03b · Framework Tags
+**Module:** `p03b_framework_tags.py`
+**Required:** yes
+**Input:** `list[ParsedFile]`, store
+**Output:** framework-derived route/layer/role metadata on matching files and functions
+
+Persists framework-adapter outputs after parsing so route handlers, page
+components, and related framework surfaces are tagged before later phases run.
+
+---
+
 ### p04 · Import Resolution
 **Module:** `p04_imports.py`  
 **Required:** yes  
@@ -102,6 +146,18 @@ Creates `CALLS` edges that would be missed by direct call-site analysis.
 
 ---
 
+### p05c · HTTP Call Detection
+**Module:** `p05c_http_calls.py`
+**Required:** yes
+**Input:** `list[ParsedFile]`, store
+**Output:** `MAKES_HTTP_CALL` edges between HTTP client sites and in-repo route handlers
+
+Matches Python HTTP client usage against framework-tagged route metadata so
+RepoGraph can connect caller sites to in-repo handlers across file and layer
+boundaries.
+
+---
+
 ### p06 · Heritage (Inheritance)
 **Module:** `p06_heritage.py`  
 **Required:** yes  
@@ -111,6 +167,18 @@ Creates `CALLS` edges that would be missed by direct call-site analysis.
 Resolves base class names for all parsed classes. Pure stdlib bases
 (`object`, `Exception`, etc.) are skipped. Protocol/ABC bases create
 `IMPLEMENTS` edges; all others create `EXTENDS` edges.
+
+---
+
+### p06b · Layer Classification
+**Module:** `p06b_layer_classify.py`
+**Required:** yes
+**Input:** `list[ParsedFile]`, store
+**Output:** layer/role tags on file and function nodes
+
+Applies architecture-layer heuristics after structural parsing. Framework-
+provided tags win first; import/path-based classification fills the remaining
+gaps.
 
 ---
 
@@ -257,6 +325,10 @@ See:
 - `repograph/pipeline/runner_parts/`
 - `repograph/plugins/`
 - `repograph/pipeline/README.md`
+
+`repograph/pipeline/phases/p14_context.py` exists in the tree as a supporting
+helper for pathway/doc-reference behavior, but it is not currently part of the
+numbered core full/incremental phase chain documented above.
 
 ---
 
