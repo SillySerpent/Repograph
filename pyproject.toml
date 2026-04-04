@@ -49,6 +49,11 @@ dev = [
 pythonVersion = "3.11"
 venvPath = "."
 venv = ".venv"
+typeCheckingMode = "standard"
+# The repo relies on library code plus installed stubs, not vendored stubs for
+# every dependency. Missing third-party stub packages should not be the reason
+# the quality gate is red.
+reportMissingTypeStubs = "none"
 # Vendored / sample trees under tests are not part of the typed product surface.
 exclude = ["tests/fixtures"]
 
