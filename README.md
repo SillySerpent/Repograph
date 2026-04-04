@@ -2,7 +2,7 @@
 
 RepoGraph is a local repository analysis project that builds and maintains a graph of a codebase. It is meant to be used against real repositories for code understanding, architecture inspection, impact analysis, and report generation.
 
-RepoGraph has both a static-analysis pipeline and a dynamic-analysis path. A static sync builds the repository graph from the source tree. `repograph sync --full` runs the full static pipeline and, when a traced test command is available, also collects runtime traces and merges runtime overlay back into the same index.
+RepoGraph has both a static-analysis pipeline and a dynamic-analysis path. A static sync builds the repository graph from the source tree. `repograph sync --full` always rebuilds the static graph, and when `auto_dynamic_analysis` is enabled it will also try to collect traced tests and merge runtime/coverage inputs into the same index.
 
 ## What RepoGraph Covers
 
@@ -12,7 +12,7 @@ RepoGraph has both a static-analysis pipeline and a dynamic-analysis path. A sta
 - Show interface-to-implementation relationships, constructor dependencies, communities, and git co-change coupling
 - Generate module summaries, config registries, invariants, doc-reference warnings, test-reachability maps, and full reports
 - Run demand-side analyzers for private-surface access, config boundary reads, DB shortcuts, UI boundary paths, architecture conformance, class roles, config flow, module signals, and decomposition signals
-- Run dynamic analysis from traced tests and merge runtime overlay, observed runtime findings, and runtime-quality diagnostics into the repository view
+- Run dynamic analysis from traced tests and merge runtime overlay, coverage overlay, observed runtime findings, and runtime-quality diagnostics into the repository view
 
 ## Language And Framework Coverage
 
@@ -28,7 +28,9 @@ RepoGraph has both a static-analysis pipeline and a dynamic-analysis path. A sta
 ./run.sh
 ```
 
-That path is useful if you want a guided setup and runner.
+That path is useful if you want a guided setup and runner. In an interactive
+shell, `./setup.sh` now opens a repo-venv-backed subshell automatically after
+setup succeeds, and `./run.sh` always prefers `.venv/bin/python` when present.
 
 If you prefer the CLI directly:
 
@@ -38,6 +40,10 @@ repograph sync --full
 repograph summary
 ```
 
+If the repo has a local `.venv`, prefer `./run.sh ...` or activate that venv
+before using bare `repograph ...` so full-sync runtime analysis runs under the
+intended interpreter.
+
 Requirements: Python 3.11+
 
 `repograph init` is optional. It only creates the `.repograph/` layout ahead of time.
@@ -46,7 +52,7 @@ Requirements: Python 3.11+
 
 The usual flow is:
 
-1. Run `repograph sync --full` to build the graph and, when traced tests are available, merge runtime observations.
+1. Run `repograph sync --full` to build the graph and, when `auto_dynamic_analysis` is enabled, let RepoGraph choose a dynamic-analysis path. If exactly one repo-scoped Python server is already publishing a RepoGraph live trace session, the CLI prompts before attaching; unattended/API usage should preconfigure `sync_runtime_attach_policy` to `always` or `never`. Otherwise RepoGraph reports why attach was unavailable or ambiguous before falling back to a managed runtime or traced tests. If an approved live attach attempt later fails, RepoGraph records that failure explicitly and then tries the next eligible managed-runtime or traced-test path instead of silently pretending attach succeeded.
 2. Use commands like `summary`, `modules`, `pathway`, `node`, `query`, and `impact` to inspect the repository from different angles.
 3. Re-run `sync` as the codebase changes, or use `watch` during active development.
 
@@ -77,7 +83,7 @@ The CLI is the broadest day-to-day interface for local work.
 - exploration: `summary`, `report`, `modules`, `node`, `query`, `impact`
 - architecture: `invariants`, `config`, `test-map`, `events`, `interfaces`, `deps`
 - pathways: `pathway list`, `pathway show`, `pathway update`
-- runtime tracing: `trace install`, `trace collect`, `trace report`, `trace clear`
+- advanced runtime diagnostics: `trace install`, `trace collect`, `trace report`, `trace clear`
 - integrations and diagnostics: `mcp`, `export`, `doctor`, `test`
 
 Full command and flag reference: [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md)
@@ -89,7 +95,7 @@ Full command and flag reference: [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md
 The Python API is useful for scripts, tests, and service integrations:
 
 ```python
-from repograph.api import RepoGraph
+from repograph.surfaces.api import RepoGraph
 
 with RepoGraph("/path/to/repo") as rg:
     rg.sync(full=True)
@@ -100,7 +106,7 @@ with RepoGraph("/path/to/repo") as rg:
 
 `RepoGraph` is a thin facade over the shared `RepoGraphService`, so the API, CLI, and MCP server all sit on the same implementation layer.
 
-`RepoGraph.sync(full=True)` performs a static full rebuild. The automatic traced-test overlay path is the CLI command `repograph sync --full`.
+`RepoGraph.sync(full=True)` follows the same full-power orchestration path as the CLI when `auto_dynamic_analysis` is enabled. That can include live attach, managed runtime execution, or traced tests depending on the runtime contract and `attach_policy`. If runtime traces or `coverage.json` already exist, sync can still merge those existing inputs when fresh execution is skipped or unavailable.
 
 `RepoGraph.search()` is the lighter service-side search surface. For the richer hybrid search flow, use the CLI `repograph query` command.
 
@@ -133,7 +139,7 @@ RepoGraph is organized around one shared service layer and a pipeline that write
 - `RepoGraphService` is the central implementation used by the CLI, Python API, and MCP server.
 - Core pipeline phases walk the repository, build file and folder nodes, parse supported languages, resolve imports and calls, detect callback registrations, track inheritance and variables, and write the graph incrementally into Kuzu through `GraphStore`.
 - After the core graph is built, plugin hooks run higher-level analyzers, evidence producers, dynamic analyzers, and exporters over the same store.
-- When traces exist, runtime overlay is merged onto the static graph so the repository view includes both static structure and observed execution data.
+- When runtime inputs exist, runtime and coverage overlays can be merged onto the static graph so the repository view includes both static structure and observed execution data.
 
 In practice, that means the tool has a fairly clear split:
 
@@ -147,7 +153,7 @@ The built-in plugin families registered in [`repograph/plugins/discovery.py`](re
 - framework adapters: `flask`, `fastapi`, `react`, `nextjs`
 - sync-time analyzers: `pathways`, `dead_code`, `duplicates`, `event_topology`, `async_tasks`
 - evidence producers: `declared_dependencies`, `runtime_overlay`
-- dynamic analyzers: `runtime_overlay`, `runtime_quality`
+- dynamic analyzers: `runtime_overlay`, `coverage_overlay`, `runtime_quality`
 - exporters: `docs_mirror`, `pathway_contexts`, `agent_guide`, `modules`, `pathways`, `summary`, `config_registry`, `invariants`, `event_topology`, `async_tasks`, `entry_points`, `doc_warnings`, `runtime_overlay_summary`, `observed_runtime_findings`, `report_surfaces`
 - demand analyzers: `dead_code`, `private_surface_access`, `config_boundary_reads`, `db_shortcuts`, `ui_boundary_paths`, `duplicates`, `contract_rules`, `boundary_shortcuts`, `architecture_conformance`, `boundary_rules`, `class_roles`, `decomposition_signals`, `config_flow`, `module_component_signals`
 
