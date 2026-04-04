@@ -9,6 +9,80 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Architecture
+
+- **Surfaces layer** (`repograph/surfaces/`) — CLI, Python API, and MCP server moved under a
+  single `surfaces/` package. Entry points:
+  - `repograph.surfaces.api.RepoGraph` (was `repograph.api`)
+  - `repograph.surfaces.cli` (was monolithic `repograph/cli.py` — 2 400 lines)
+  - `repograph.surfaces.mcp.server.create_server` (was `repograph.mcp.server`)
+  - `repograph.surfaces.mcp.nl_query.NLQueryEngine` (was `repograph.mcp.nl_query`)
+
+- **Unified settings** (`repograph/settings.py`) — replaces the two-file
+  `config.py` + `config_schema.py`. Single module owns all constants, path helpers,
+  the `Settings` dataclass, and the layered loader (`load_settings`):
+  defaults → root YAML → `.repograph/` YAML (wins) → `settings.json` (highest).
+
+- **Settings management via CLI/API/MCP** — `repograph config list/get/set/reset`
+  subgroup reads and writes `.repograph/settings.json`. `RepoGraph.get_config`,
+  `set_config`, `list_config`, `reset_config` on the Python API. MCP tools
+  `get_config` / `set_config` and resource `repograph://settings`.
+
+- **CLI decomposed** — 2 400-line `cli.py` replaced by a package
+  (`repograph/surfaces/cli/`) with a clean assembly file (`__init__.py`),
+  shared app/helpers (`app.py`), output helpers (`output.py`), and nine command
+  modules under `commands/`.
+
+- **Old config registry command renamed** — `repograph config` (graph config-key
+  registry viewer) → `repograph config-registry` to free the name for the new
+  settings subgroup.
+
+- **Deleted redundant files** — `repograph/config.py`, `repograph/config_schema.py`,
+  `repograph/api.py`, and `repograph/mcp/` are gone; everything migrated cleanly.
+
+### Added
+
+- **`repograph init` writes a placeholder YAML** — creates
+  `.repograph/repograph.index.yaml` with all configurable keys commented out
+  so teams can discover available options without reading docs.
+
+- **Auto-detect test directory without pyproject.toml** — `sync --full` now
+  also auto-discovers a `tests/`, `test/`, or `spec/` directory containing `.py`
+  files even when no `pyproject.toml` pytest section exists.
+
+- **`conftest.py` + `sitecustomize.py` go to `.repograph/`** — dynamic analysis
+  instrumentation files are written inside `.repograph/` (not the repo root).
+  Pytest discovers `.repograph/conftest.py` automatically.
+
+- **`repograph report` redesigned** — sections use Rich `Rule` dividers and
+  `Panel` blocks for structure. Stats shown in a grid header row with all seven
+  counters. Entry-points table adds a Callers/Callees column. Pathways each
+  rendered in a bordered panel with context-doc preview. Dead-code tables gain
+  a `Reason` column and show file paths for both tiers. Duplicates show
+  parent-directory context. Invariants displayed as a structured table. Test
+  coverage adds a partial-coverage breakdown. Communities section added. Footer
+  shows next-step hints.
+
+- **`repograph summary` redesigned** — repo identity and health shown in a
+  header panel. Stats presented as a compact inline grid including pathways
+  and communities counts. Health rendered as a colour-coded `●` badge. Issues
+  section breaks out production vs tooling dead code separately.
+
+- **`modules` command** output uses `box.SIMPLE` for consistent table style and
+  the internal `_add_rows` helper is no longer duplicated.
+
+### Fixed
+
+- **YAML layer priority** — `.repograph/repograph.index.yaml` now correctly wins
+  over the root-level `repograph.index.yaml` when both are present.
+
+- **`settings.json` list coercion** — when a list-type setting is stored as a
+  JSON-encoded string (e.g. from the CLI), it is parsed via `json.loads` instead
+  of being character-exploded by `list(str)`.
+
+- **Module issues column spacing** — dead/dup badge formatting was missing a
+  space (`1dead` → `1 dead`), fixed in both the report and modules commands.
+
 ### Schema
 
 - **1.2** — `Function` nodes add `entry_score_base`, `entry_score_multipliers`,
